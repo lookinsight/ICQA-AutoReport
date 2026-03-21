@@ -4,7 +4,14 @@ from PIL import ImageGrab
 import json
 import os
 from datetime import datetime
+import ctypes # 💡 새로 추가할 도구!
 
+# 💡 윈도우 디스플레이 배율(확대) 무시하고 모니터 전체 크기를 100% 덮도록 강제하는 마법 주문
+try:
+    ctypes.windll.shcore.SetProcessDpiAwareness(1)
+except:
+    pass
+    
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
