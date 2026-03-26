@@ -19,8 +19,10 @@ COORD_FILE = "capture_coords.json"
 class CaptureApp(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("ICQA Auto Report - 캡처 리모컨 (v2.4)")
-        self.geometry("450x550") # 삭제 버튼이 들어가서 가로/세로 길이를 살짝 늘렸습니다.
+        self.title("ICQA Auto Report - 캡처 리모컨 (v2.5)")
+        
+        # 💡 [핵심 1] 메인 프로그램 창을 정중앙에 띄웁니다 (가로 450, 세로 550)
+        self.center_window(self, 450, 550)
         
         self.coords = {"1": None, "2": None, "3": None, "4": None, "5": None}
         self.load_coords()
@@ -36,23 +38,33 @@ class CaptureApp(ctk.CTk):
             frame = ctk.CTkFrame(self, fg_color="transparent")
             frame.pack(pady=5, fill="x", padx=20)
             
-            # [영역 지정 버튼] (이걸 다시 누르면 덮어쓰기/수정 됩니다)
             btn = ctk.CTkButton(frame, text=f"📍 {i}번 영역 지정", width=120, command=lambda num=str(i): self.start_snip(num))
             btn.pack(side="left", padx=5)
             
-            # [상태 글씨]
             status_text = "✅ 지정됨" if self.coords[str(i)] else "❌ 미지정"
             lbl = ctk.CTkLabel(frame, text=status_text, width=80)
             lbl.pack(side="left", padx=5)
             self.coord_labels[str(i)] = lbl
             
-            # 💡 [삭제 버튼] 새로 추가!
             del_btn = ctk.CTkButton(frame, text="❌ 삭제", width=60, fg_color="darkred", hover_color="maroon", command=lambda num=str(i): self.delete_coord(num))
             del_btn.pack(side="left", padx=5)
 
         ctk.CTkLabel(self, text="[2단계] 실전 캡처 리모컨", font=("Arial", 16, "bold")).pack(pady=(30, 10))
         remote_btn = ctk.CTkButton(self, text="🎛️ 항상 위 리모컨 띄우기", fg_color="green", hover_color="darkgreen", height=40, command=self.open_remote)
         remote_btn.pack(pady=10, padx=20, fill="x")
+
+    # 💡 [새로운 마법] 창을 화면 한가운데로 옮겨주는 전용 함수입니다.
+    def center_window(self, target_window, width, height):
+        # 1. 사용자의 모니터 해상도(가로, 세로 픽셀)를 알아냅니다.
+        screen_width = target_window.winfo_screenwidth()
+        screen_height = target_window.winfo_screenheight()
+        
+        # 2. 정중앙에 오기 위한 x, y 시작 좌표를 수학적으로 계산합니다.
+        x = int((screen_width / 2) - (width / 2))
+        y = int((screen_height / 2) - (height / 2))
+        
+        # 3. 계산된 크기와 위치로 창을 띄웁니다.
+        target_window.geometry(f"{width}x{height}+{x}+{y}")
 
     def load_coords(self):
         if os.path.exists(COORD_FILE):
@@ -63,12 +75,10 @@ class CaptureApp(ctk.CTk):
         with open(COORD_FILE, "w") as f:
             json.dump(self.coords, f)
 
-    # 💡 [새로운 기능] 좌표 삭제 함수
     def delete_coord(self, num):
         self.coords[num] = None
         self.save_coords()
         self.coord_labels[num].configure(text="❌ 미지정")
-        # 조준선이 켜져 있는 상태에서 삭제했다면 조준선도 꺼줍니다.
         self.hide_guide()
 
     def start_snip(self, num):
@@ -117,7 +127,10 @@ class CaptureApp(ctk.CTk):
 
         self.remote = ctk.CTkToplevel(self)
         self.remote.title("리모컨")
-        self.remote.geometry("280x350") 
+        
+        # 💡 [핵심 2] 리모컨 창도 띄울 때 정중앙에 띄웁니다 (가로 280, 세로 350)
+        self.center_window(self.remote, 280, 350)
+        
         self.remote.attributes("-topmost", True)
 
         for i in range(1, 6):
@@ -168,16 +181,13 @@ class CaptureApp(ctk.CTk):
         if not coord:
             return
             
-        self.hide_guide() # 1. 조준선 숨기기
+        self.hide_guide()
         
-        # 💡 2. 리모컨 창 숨기기
         if self.remote is not None and self.remote.winfo_exists():
             self.remote.withdraw()
             
-        # 💡 3. 메인 프로그램(본체) 창도 확실하게 숨기기!
         self.withdraw()
         
-        # 창이 완벽하게 사라질 시간을 0.3초 주고 캡처를 실행합니다.
         self.after(300, lambda: self._do_capture(num, coord))
         
     def _do_capture(self, num, coord):
@@ -188,7 +198,6 @@ class CaptureApp(ctk.CTk):
         img.save(filename)
         print(f"[{filename}] 캡처 완료!")
 
-        # 💡 4. 사진이 다 찍혔으니 숨어있던 리모컨과 메인 창을 모두 다시 부릅니다!
         if self.remote is not None and self.remote.winfo_exists():
             self.remote.deiconify()
         self.deiconify()
