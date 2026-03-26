@@ -4,14 +4,13 @@ from PIL import ImageGrab
 import json
 import os
 from datetime import datetime
-import ctypes # 💡 새로 추가할 도구!
+import ctypes 
 
-# 💡 윈도우 디스플레이 배율(확대) 무시하고 모니터 전체 크기를 100% 덮도록 강제하는 마법 주문
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(1)
 except:
     pass
-    
+
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
@@ -20,15 +19,16 @@ COORD_FILE = "capture_coords.json"
 class CaptureApp(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("ICQA Auto Report - 캡처 리모컨 (v2.2)")
+        self.title("ICQA Auto Report - 캡처 리모컨 (v2.3)")
         self.geometry("400x500")
         
         self.coords = {"1": None, "2": None, "3": None, "4": None, "5": None}
         self.load_coords()
         
-        self.guide_win = None # 💡 빨간색 조준선 창을 기억해둘 변수 추가
+        self.guide_win = None 
+        self.remote = None # 💡 리모컨 창을 기억할 변수를 추가했습니다.
 
-        # --- 메인 UI 부분 (이전과 동일) ---
+        # --- 메인 UI 부분 ---
         ctk.CTkLabel(self, text="[1단계] 5개 캡처 영역 고정하기", font=("Arial", 16, "bold")).pack(pady=(20, 10))
         self.coord_labels = {}
         for i in range(1, 6):
@@ -55,7 +55,7 @@ class CaptureApp(ctk.CTk):
             json.dump(self.coords, f)
 
     def start_snip(self, num):
-        self.withdraw() # 본체 창 숨기기
+        self.withdraw() 
         self.snip_window = tk.Toplevel(self)
         self.snip_window.attributes('-alpha', 0.3)
         self.snip_window.attributes('-fullscreen', True)
@@ -82,7 +82,7 @@ class CaptureApp(ctk.CTk):
         end_x = self.snip_window.winfo_pointerx()
         end_y = self.snip_window.winfo_pointery()
         self.snip_window.destroy()
-        self.deiconify() # 본체 창 다시 띄우기
+        self.deiconify() 
 
         x1, y1 = min(self.start_x, end_x), min(self.start_y, end_y)
         x2, y2 = max(self.start_x, end_x), max(self.start_y, end_y)
@@ -92,31 +92,33 @@ class CaptureApp(ctk.CTk):
             self.save_coords()
             self.coord_labels[num].configure(text="✅ 지정됨 (저장완료)")
 
-    # --- 🎛️ v2.2 업그레이드 리모컨 & 조준선 엔진 ---
+    # --- 🎛️ 리모컨 & 조준선 엔진 ---
     def open_remote(self):
-        remote = ctk.CTkToplevel(self)
-        remote.title("리모컨")
-        remote.geometry("280x350") # 가로 폭을 살짝 넓혔습니다.
-        remote.attributes("-topmost", True)
+        # 이미 리모컨이 열려있으면 중복해서 열지 않도록 방어합니다.
+        if self.remote is not None and self.remote.winfo_exists():
+            self.remote.focus()
+            return
+
+        self.remote = ctk.CTkToplevel(self) # 💡 self.remote 로 변경했습니다.
+        self.remote.title("리모컨")
+        self.remote.geometry("280x350") 
+        self.remote.attributes("-topmost", True)
 
         for i in range(1, 6):
-            frame = ctk.CTkFrame(remote, fg_color="transparent")
+            frame = ctk.CTkFrame(self.remote, fg_color="transparent")
             frame.pack(pady=5, padx=10, fill="x")
             
-            # 💡 [버튼 1] 조준선 켜기 버튼 (회색)
             btn_aim = ctk.CTkButton(frame, text=f"🔍 {i}번 조준", width=100, fg_color="gray", hover_color="dimgray", command=lambda num=str(i): self.show_guide(num))
             btn_aim.pack(side="left", padx=5)
             
-            # 💡 [버튼 2] 진짜 사진 찍기 버튼 (파란색)
             btn_shot = ctk.CTkButton(frame, text=f"📸 찰칵!", width=100, command=lambda num=str(i): self.take_screenshot(num))
             btn_shot.pack(side="right", padx=5)
             
-        # 조준선을 수동으로 지우는 버튼 추가
-        btn_clear = ctk.CTkButton(remote, text="❌ 조준선 끄기", fg_color="darkred", hover_color="maroon", command=self.hide_guide)
+        btn_clear = ctk.CTkButton(self.remote, text="❌ 조준선 끄기", fg_color="darkred", hover_color="maroon", command=self.hide_guide)
         btn_clear.pack(pady=15, fill="x", padx=15)
 
     def show_guide(self, num):
-        self.hide_guide() # 다른 조준선이 켜져 있으면 먼저 지웁니다.
+        self.hide_guide() 
         
         coord = self.coords[num]
         if not coord:
@@ -127,25 +129,20 @@ class CaptureApp(ctk.CTk):
         w = x2 - x1
         h = y2 - y1
         
-        # 조준선 창 만들기
         self.guide_win = tk.Toplevel(self)
-        self.guide_win.overrideredirect(True) # 윈도우 창의 상단 X(닫기) 바를 없앰
-        self.guide_win.attributes("-topmost", True) # 항상 위에 고정
+        self.guide_win.overrideredirect(True) 
+        self.guide_win.attributes("-topmost", True) 
         
-        # 💡 [핵심 마법] 특정 색상(마젠타)을 완전 투명하게 만들고, 마우스 클릭을 통과시킵니다!
         transparent_color = "magenta"
         self.guide_win.config(bg=transparent_color)
         self.guide_win.attributes("-transparentcolor", transparent_color)
         
-        # 지정된 좌표와 크기로 조준선 이동
         self.guide_win.geometry(f"{w}x{h}+{x1}+{y1}")
         
-        # 빨간색 테두리 그리기
         canvas = tk.Canvas(self.guide_win, bg=transparent_color, highlightthickness=3, highlightbackground="red")
         canvas.pack(fill="both", expand=True)
 
     def hide_guide(self):
-        # 조준선 창을 파괴(삭제)합니다.
         if self.guide_win:
             self.guide_win.destroy()
             self.guide_win = None
@@ -155,11 +152,14 @@ class CaptureApp(ctk.CTk):
         if not coord:
             return
             
-        # 💡 [가장 중요한 부분] 사진에 빨간 테두리가 찍히면 안 되니까, 찰칵! 하기 직전에 조준선을 지워버립니다.
-        self.hide_guide()
+        self.hide_guide() # 1. 조준선 숨기기
         
-        # 컴퓨터가 창을 지우는 시간을 아주 잠깐(0.2초) 벌어준 뒤에 진짜 카메라 셔터를 누릅니다.
-        self.after(200, lambda: self._do_capture(num, coord))
+        # 💡 2. 리모컨 창도 캡처 영역을 가리지 않도록 숨깁니다! (투명 인간 마법)
+        if self.remote is not None and self.remote.winfo_exists():
+            self.remote.withdraw()
+        
+        # 창이 완벽하게 사라질 시간을 살짝(0.3초) 주고 캡처를 실행합니다.
+        self.after(300, lambda: self._do_capture(num, coord))
         
     def _do_capture(self, num, coord):
         bbox = (coord[0], coord[1], coord[2], coord[3])
@@ -168,6 +168,10 @@ class CaptureApp(ctk.CTk):
         filename = f"{num}_{time_str}.png"
         img.save(filename)
         print(f"[{filename}] 캡처 완료!")
+
+        # 💡 3. 사진이 다 찍혔으니 숨어있던 리모컨 창을 다시 부릅니다!
+        if self.remote is not None and self.remote.winfo_exists():
+            self.remote.deiconify()
 
 if __name__ == "__main__":
     app = CaptureApp()
