@@ -1,4 +1,4 @@
-name: Build Table Engine EXE
+name: Build AutoReport EXE
 
 on:
   push:
@@ -18,17 +18,18 @@ jobs:
         python-version: '3.10'
 
     - name: Install dependencies
-      # 💡 엑셀 분석(pandas, openpyxl)과 그림 그리기(Pillow) 도구를 모두 설치합니다.
       run: |
         python -m pip install --upgrade pip
         pip install pandas openpyxl Pillow customtkinter pyinstaller
 
     - name: Build with PyInstaller
-      # 💡 table_test.py 파일을 하나의 exe로 굽습니다.
+      # 💡 AutoReport_Test.py 파일을 AutoReport_test.exe로 굽습니다!
       run: pyinstaller --noconsole --onefile --name AutoReport_test AutoReport_Test.py
 
     - name: Upload EXE
       uses: actions/upload-artifact@v4
       with:
-        name: Table-Engine-Test-exe
-        path: dist/table_test.exe
+        # 💡 [수정 포인트 1] 다운로드 받을 때 압축파일 이름도 멋지게 변경!
+        name: AutoReport-exe
+        # 💡 [핵심 수정 포인트 2] 깃허브가 찾을 파일 이름을 새 이름으로 완벽하게 맞춰줍니다!
+        path: dist/AutoReport_test.exe
