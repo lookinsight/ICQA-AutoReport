@@ -25,7 +25,7 @@ jobs:
 
     - name: Build with PyInstaller
       # 💡 table_test.py 파일을 하나의 exe로 굽습니다.
-      run: pyinstaller --noconsole --onefile table_test.py
+      run: pyinstaller --noconsole --onefile --name AutoReport_test AutoReport_Test.py
 
     - name: Upload EXE
       uses: actions/upload-artifact@v4
