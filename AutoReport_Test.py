@@ -26,7 +26,7 @@ class ICQA_AutoReportApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("AutoReport_test")
-        self.center_window(self, 550, 850)
+        self.center_window(self, 550, 900) # 상품명 입력 칸이 추가되어 창 높이를 살짝 늘림
         
         self.raw_filepath = None
         self.dive_filepath = None
@@ -56,6 +56,13 @@ class ICQA_AutoReportApp(ctk.CTk):
         ctk.CTkLabel(frame_date, text="📅 보고 대상 날짜:", font=("Arial", 14, "bold")).pack(side="left", padx=(0, 10))
         self.date_combo = ctk.CTkComboBox(frame_date, values=["Raw Data를 먼저 넣어주세요"], width=180)
         self.date_combo.pack(side="left")
+
+        # 💡 [추가됨] 상품명 입력 및 삭제 UI
+        frame_delete = ctk.CTkFrame(frame_excel, fg_color="transparent")
+        frame_delete.pack(pady=(5, 5), padx=20, fill="x")
+        ctk.CTkLabel(frame_delete, text="🗑️ 제외 상품명:", font=("Arial", 14, "bold"), text_color="#FF6B6B").pack(side="left", padx=(0, 10))
+        self.entry_sku_delete = ctk.CTkEntry(frame_delete, placeholder_text="표에서 지울 SKU Name (선택)", width=230)
+        self.entry_sku_delete.pack(side="left")
 
         self.btn_run = ctk.CTkButton(frame_excel, text="🚀 VLOOKUP 병합 및 Defect Type 선택", fg_color="green", hover_color="darkgreen", height=45, command=self.process_data)
         self.btn_run.pack(pady=15, padx=20, fill="x")
@@ -121,14 +128,12 @@ class ICQA_AutoReportApp(ctk.CTk):
             b = b[:-2]  
         return b
 
-    # 💡 [핵심 신무기] 띄어쓰기가 없어도 픽셀 단위로 정확히 재서 강제로 잘라버리는 함수!
     def force_pixel_wrap(self, text, font, max_width):
         if not text: return ""
         lines = []
         current_line = ""
         for char in str(text):
             test_line = current_line + char
-            # 폰트 길이를 측정합니다
             try:
                 w = font.getlength(test_line)
             except:
@@ -138,7 +143,6 @@ class ICQA_AutoReportApp(ctk.CTk):
                     bbox = font.getbbox(test_line)
                     w = bbox[2] if bbox else 0
             
-            # 폭이 한계치를 넘으면 얄짤없이 다음 줄로 넘깁니다.
             if w > max_width:
                 lines.append(current_line)
                 current_line = char
@@ -204,6 +208,14 @@ class ICQA_AutoReportApp(ctk.CTk):
             df_raw[barcode_col] = df_raw[barcode_col].apply(self.clean_barcode)
             df_raw['REPORT_DATE'] = pd.to_datetime(df_raw['REPORT_DATE'], errors='coerce').dt.strftime('%Y-%m-%d')
             df_raw = df_raw[df_raw['REPORT_DATE'] == target_date]
+
+            # 💡 [추가됨] 특정 SKU Name 삭제 로직
+            sku_to_delete = self.entry_sku_delete.get().strip()
+            if sku_to_delete:
+                initial_len = len(df_raw)
+                df_raw = df_raw[df_raw['DESCRIPTION'] != sku_to_delete]
+                deleted_len = initial_len - len(df_raw)
+                print(f"입력된 상품명 '{sku_to_delete}' {deleted_len}건 제외 완료.")
             
             if df_raw.empty:
                 messagebox.showinfo("알림", f"Raw Data 파일에 {target_date} 날짜의 데이터가 없습니다.")
@@ -344,9 +356,11 @@ class ICQA_AutoReportApp(ctk.CTk):
         except:
             font_title = font_header = font_row = ImageFont.load_default()
 
+        # 💡 [핵심 해결 1] Problem QTY, Problem 건수 컬럼 너비를 95 -> 120으로 대폭 증가시켜 겹침 방지
         cols = [
-            ("NO", 50), ("External ID", 110), ("SKU Name", 300), ("Problem QTY", 95), 
-            ("Problem 건수", 95), ("Problem Type", 120), ("Solve Type", 120), 
+            ("NO", 50), ("External ID", 110), ("SKU Name", 300), 
+            ("Problem QTY", 120), ("Problem 건수", 120), 
+            ("Problem Type", 120), ("Solve Type", 120), 
             ("Defect Type", 100), ("Dive-Deep", 400)
         ]
         table_width = sum([w for _, w in cols])
@@ -358,12 +372,10 @@ class ICQA_AutoReportApp(ctk.CTk):
             
             raw_title = f"[{r_type}] Problem Analysis"
             
-            # 💡 [필살기] 표 가로 길이에서 40픽셀 안전거리 남기고 픽셀 단위로 잘라버립니다!
             safe_width = table_width - 40 
             title_wrap = self.force_pixel_wrap(raw_title, font_title, safe_width)
             title_lines = title_wrap.count('\n') + 1
             
-            # 1줄당 40픽셀의 넉넉한 높이를 할당합니다.
             title_height = (title_lines * 40) + 30 
 
             row_heights = []
@@ -386,20 +398,31 @@ class ICQA_AutoReportApp(ctk.CTk):
 
             color_navy = '#1A365D'; color_white = '#FFFFFF'; color_iceblue = '#F0F4F8'; color_border = '#808080'
 
-            # 💡 표 전체 외곽선을 그려서 옆 선 뚫림 현상을 눈으로 원천 차단!
             draw.rectangle([0, 0, table_width-1, total_height-1], outline=color_border, width=2)
 
-            # 제목 그리기 (왼쪽 여백 15, 위쪽 넉넉하게 20)
             draw.text((15, 20), title_wrap, font=font_title, fill='black', spacing=10)
 
-            # 표 그리기
+            # 표 헤더 그리기
             y_off = title_height
             draw.rectangle([0, y_off, table_width, y_off + header_height], fill=color_navy, outline=color_border)
             
             x_off = 0
             for name, w in cols:
                 draw.rectangle([x_off, y_off, x_off+w, y_off + header_height], outline=color_border)
-                draw.text((x_off + 10, y_off + 12), name, font=font_header, fill=color_white)
+                
+                # 💡 [핵심 해결 2] 글씨 길이를 측정해서 헤더 박스의 '정중앙'에 오도록 좌표를 계산 (쏠림 및 겹침 방지)
+                try:
+                    text_bbox = font_header.getbbox(name)
+                    text_w = text_bbox[2] - text_bbox[0]
+                    text_h = text_bbox[3] - text_bbox[1]
+                except:
+                    text_w = len(name) * 8 # fallback
+                    text_h = 14
+                    
+                center_x = x_off + (w - text_w) / 2
+                center_y = y_off + (header_height - text_h) / 2 - 2
+                
+                draw.text((center_x, center_y), name, font=font_header, fill=color_white)
                 x_off += w
 
             y_off += header_height
