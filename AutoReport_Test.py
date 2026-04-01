@@ -49,7 +49,7 @@ class ICQA_AutoReportApp(ctk.CTk):
         self.btn_dive = ctk.CTkButton(frame_excel, text="📁 2. Dive-Deep(사유) 엑셀 선택", fg_color="#2B547E", height=40, command=self.load_dive_data)
         self.btn_dive.pack(pady=5, padx=20, fill="x")
 
-        # 💡 [새 기능!] 보고 날짜 선택기 추가
+        # 📅 보고 날짜 선택기
         frame_date = ctk.CTkFrame(frame_excel, fg_color="transparent")
         frame_date.pack(pady=(10, 5), padx=20, fill="x")
         ctk.CTkLabel(frame_date, text="📅 보고 대상 날짜:", font=("Arial", 14, "bold")).pack(side="left", padx=(0, 10))
@@ -90,9 +90,7 @@ class ICQA_AutoReportApp(ctk.CTk):
         remote_btn = ctk.CTkButton(frame_capture, text="🎛️ 항상 위 리모컨 띄우기", fg_color="#E56717", hover_color="#C35613", height=40, command=self.open_remote)
         remote_btn.pack(pady=15, padx=20, fill="x")
 
-        # ==========================================
-        # 💡 우리만의 시그니처 워터마크
-        # ==========================================
+        # 워터마크
         footer_label = ctk.CTkLabel(self, text="💡 Developed by 룩희 & 재민", font=("Arial", 12, "bold", "italic"), text_color="gray")
         footer_label.pack(side="bottom", pady=10)
 
@@ -109,6 +107,14 @@ class ICQA_AutoReportApp(ctk.CTk):
         if cleaned.endswith('.0'): cleaned = cleaned[:-2]
         return cleaned
 
+    # 💡 [핵심 해결책 1] 초강력 바코드 세척기 (소수점 .0 귀신 퇴치)
+    def clean_barcode(self, val):
+        if pd.isna(val): return ""
+        b = str(val).strip().upper()
+        if b.endswith('.0'): 
+            b = b[:-2]  # 끝에 .0 이 붙어있으면 가차없이 잘라냅니다.
+        return b
+
     def load_raw_data(self):
         filepath = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
         if filepath:
@@ -116,17 +122,15 @@ class ICQA_AutoReportApp(ctk.CTk):
             filename = os.path.basename(filepath)
             self.btn_raw.configure(text=f"✅ {filename} (클릭하여 변경)", fg_color="#454545")
             
-            # 💡 [핵심] Raw Data를 쓱 읽어서 존재하는 날짜들을 콤보박스에 넣어줍니다!
             try:
                 df = pd.read_excel(filepath, engine='openpyxl')
                 df.columns = df.columns.str.strip().str.replace('\n', '')
                 if 'REPORT_DATE' in df.columns:
-                    # 날짜 형식으로 변환 후 YYYY-MM-DD 모양만 추출
                     dates = pd.to_datetime(df['REPORT_DATE'], errors='coerce').dt.strftime('%Y-%m-%d').dropna().unique().tolist()
-                    dates.sort(reverse=True) # 최신 날짜가 맨 위로 오게 정렬
+                    dates.sort(reverse=True)
                     if dates:
                         self.date_combo.configure(values=dates)
-                        self.date_combo.set(dates[0]) # 제일 최신 날짜로 자동 세팅
+                        self.date_combo.set(dates[0])
             except Exception as e:
                 print(f"날짜 불러오기 실패: {e}")
 
@@ -150,32 +154,33 @@ class ICQA_AutoReportApp(ctk.CTk):
         try:
             self.result_box.delete("1.0", tk.END)
             
+            # --- 1. Raw Data 처리 ---
             with open(self.raw_filepath, 'rb') as f:
                 df_raw = pd.read_excel(f, engine='openpyxl')
             
             df_raw.columns = df_raw.columns.str.strip().str.replace('\n', '')
             
-            # 💡 BARCODE를 우선적으로 찾습니다! (Dive-Deep의 상품바코드와 매칭 확률 높이기)
+            # 바코드 열 찾기
             barcode_col = 'BARCODE' if 'BARCODE' in df_raw.columns else ('EXTERNALID' if 'EXTERNALID' in df_raw.columns else None)
-            
             if not barcode_col:
                 messagebox.showerror("오류", "Raw Data에 'BARCODE' 또는 'EXTERNALID' 열이 없습니다!")
                 return
                 
-            df_raw[barcode_col] = df_raw[barcode_col].astype(str)
-
             req_raw = ['RESOLVETYPE', barcode_col, 'PROBLEM_QTY', 'MOVED_QTY', 'DESCRIPTION', 'REPORT_DATE']
             for col in req_raw:
                 if col not in df_raw.columns:
-                    messagebox.showerror("오류", f"Raw Data에 '{col}' 열이 없습니다!\n(열 이름 띄어쓰기를 확인해주세요)")
+                    messagebox.showerror("오류", f"Raw Data에 '{col}' 열이 없습니다!")
                     return
 
-            # 날짜 변환 및 💡타겟 날짜만 쏙 필터링!
+            # 💡 [적용] Raw Data 바코드 다림질
+            df_raw[barcode_col] = df_raw[barcode_col].apply(self.clean_barcode)
+
+            # Raw Data 날짜 필터링
             df_raw['REPORT_DATE'] = pd.to_datetime(df_raw['REPORT_DATE'], errors='coerce').dt.strftime('%Y-%m-%d')
             df_raw = df_raw[df_raw['REPORT_DATE'] == target_date]
             
             if df_raw.empty:
-                messagebox.showinfo("알림", f"선택하신 날짜({target_date})의 데이터가 Raw 파일에 존재하지 않습니다.")
+                messagebox.showinfo("알림", f"Raw Data 파일에 {target_date} 날짜의 데이터가 없습니다.")
                 return
 
             grouped = df_raw.groupby(['RESOLVETYPE', barcode_col, 'REPORT_DATE']).agg({
@@ -185,25 +190,32 @@ class ICQA_AutoReportApp(ctk.CTk):
                 'DESCRIPTION': 'first' 
             }).rename(columns={barcode_col: 'COUNT'}).reset_index()
 
+
+            # --- 2. Dive-Deep Data 처리 ---
             with open(self.dive_filepath, 'rb') as f:
                 df_dive = pd.read_excel(f, engine='openpyxl')
             
             df_dive.columns = df_dive.columns.str.strip().str.replace('\n', '')
             
-            if '상품바코드' in df_dive.columns:
-                df_dive['상품바코드'] = df_dive['상품바코드'].astype(str)
-            
             dive_date_col = 'Date' 
             req_dive = ['상품바코드', '문제유형', '사유', dive_date_col]
             for col in req_dive:
                 if col not in df_dive.columns:
-                    messagebox.showerror("오류", f"Dive-Deep 파일에 '{col}' 열이 없습니다!\n(실제 열 이름: {list(df_dive.columns)})")
+                    messagebox.showerror("오류", f"Dive-Deep 파일에 '{col}' 열이 없습니다!")
                     return
 
-            # 날짜 변환 및 💡타겟 날짜만 쏙 필터링!
+            # 💡 [적용] Dive-Deep 바코드 다림질
+            df_dive['상품바코드'] = df_dive['상품바코드'].apply(self.clean_barcode)
+
+            # Dive-Deep 날짜 필터링
             df_dive[dive_date_col] = pd.to_datetime(df_dive[dive_date_col], errors='coerce').dt.strftime('%Y-%m-%d')
             df_dive = df_dive[df_dive[dive_date_col] == target_date]
+            
+            # 💡 [경고 알림 추가] 만약 다 걸렀는데 Dive-Deep에 해당 날짜 데이터가 없다면?
+            if df_dive.empty:
+                messagebox.showwarning("데이터 경고", f"Dive-Deep(사유) 파일에 {target_date} 날짜의 데이터가 존재하지 않습니다!\n(날짜 형식을 확인하시거나 사유 파일이 최신인지 확인해주세요.)")
 
+            # --- 3. 완벽 매칭 (VLOOKUP) ---
             self.final_report_data = []
             resolve_types = grouped['RESOLVETYPE'].unique()
             
