@@ -26,7 +26,7 @@ class ICQA_AutoReportApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("AutoReport_test")
-        self.center_window(self, 550, 900) # 상품명 입력 칸이 추가되어 창 높이를 살짝 늘림
+        self.center_window(self, 550, 900) 
         
         self.raw_filepath = None
         self.dive_filepath = None
@@ -57,23 +57,31 @@ class ICQA_AutoReportApp(ctk.CTk):
         self.date_combo = ctk.CTkComboBox(frame_date, values=["Raw Data를 먼저 넣어주세요"], width=180)
         self.date_combo.pack(side="left")
 
-        # 💡 [추가됨] 상품명 입력 및 삭제 UI
+        # 상품명 제외 기능
         frame_delete = ctk.CTkFrame(frame_excel, fg_color="transparent")
         frame_delete.pack(pady=(5, 5), padx=20, fill="x")
         ctk.CTkLabel(frame_delete, text="🗑️ 제외 상품명:", font=("Arial", 14, "bold"), text_color="#FF6B6B").pack(side="left", padx=(0, 10))
         self.entry_sku_delete = ctk.CTkEntry(frame_delete, placeholder_text="표에서 지울 SKU Name (선택)", width=230)
         self.entry_sku_delete.pack(side="left")
 
-        self.btn_run = ctk.CTkButton(frame_excel, text="🚀 VLOOKUP 병합 및 Defect Type 선택", fg_color="green", hover_color="darkgreen", height=45, command=self.process_data)
-        self.btn_run.pack(pady=15, padx=20, fill="x")
+        # 💡 [새 기능] 보고 범위 선택 UI (Top 5 vs 전체)
+        self.report_range = ctk.StringVar(value="top5")
+        frame_range_opt = ctk.CTkFrame(frame_excel, fg_color="transparent")
+        frame_range_opt.pack(padx=20, pady=(5, 0), fill="x")
+        ctk.CTkLabel(frame_range_opt, text="📋 보고 표 범위:", font=("Arial", 12, "bold"), text_color="#00FFCC").pack(side="left")
+        ctk.CTkRadioButton(frame_range_opt, text="Top 5 (기본)", variable=self.report_range, value="top5").pack(side="left", padx=(10, 5))
+        ctk.CTkRadioButton(frame_range_opt, text="전체 데이터", variable=self.report_range, value="all").pack(side="left", padx=5)
 
+        # 바코드 추출 방식
         self.barcode_mode = ctk.StringVar(value="top1")
         frame_barcode_opt = ctk.CTkFrame(frame_excel, fg_color="transparent")
         frame_barcode_opt.pack(padx=20, pady=(5, 0), fill="x")
-        
-        ctk.CTkLabel(frame_barcode_opt, text="👇 [카톡 검색용] 바코드 추출 방식:", font=("Arial", 12, "bold"), text_color="yellow").pack(side="left")
+        ctk.CTkLabel(frame_barcode_opt, text="👇 바코드 추출 방식:", font=("Arial", 12, "bold"), text_color="yellow").pack(side="left")
         ctk.CTkRadioButton(frame_barcode_opt, text="1위 바코드", variable=self.barcode_mode, value="top1", command=self.update_barcode_text).pack(side="left", padx=(10, 5))
         ctk.CTkRadioButton(frame_barcode_opt, text="🎲랜덤 바코드", variable=self.barcode_mode, value="random", command=self.update_barcode_text).pack(side="left", padx=5)
+
+        self.btn_run = ctk.CTkButton(frame_excel, text="🚀 VLOOKUP 병합 및 Defect Type 선택", fg_color="green", hover_color="darkgreen", height=45, command=self.process_data)
+        self.btn_run.pack(pady=15, padx=20, fill="x")
 
         self.result_box = ctk.CTkTextbox(frame_excel, height=80, font=("Arial", 14))
         self.result_box.pack(padx=20, pady=(5, 10), fill="x")
@@ -209,13 +217,9 @@ class ICQA_AutoReportApp(ctk.CTk):
             df_raw['REPORT_DATE'] = pd.to_datetime(df_raw['REPORT_DATE'], errors='coerce').dt.strftime('%Y-%m-%d')
             df_raw = df_raw[df_raw['REPORT_DATE'] == target_date]
 
-            # 💡 [추가됨] 특정 SKU Name 삭제 로직
             sku_to_delete = self.entry_sku_delete.get().strip()
             if sku_to_delete:
-                initial_len = len(df_raw)
                 df_raw = df_raw[df_raw['DESCRIPTION'] != sku_to_delete]
-                deleted_len = initial_len - len(df_raw)
-                print(f"입력된 상품명 '{sku_to_delete}' {deleted_len}건 제외 완료.")
             
             if df_raw.empty:
                 messagebox.showinfo("알림", f"Raw Data 파일에 {target_date} 날짜의 데이터가 없습니다.")
@@ -251,12 +255,17 @@ class ICQA_AutoReportApp(ctk.CTk):
             
             for r_type in resolve_types:
                 type_df = grouped[grouped['RESOLVETYPE'] == r_type].copy()
-                top5_df = type_df.sort_values(by=['PROBLEM_QTY', 'MOVED_QTY'], ascending=[False, False]).head(5)
                 
-                self.barcode_candidates[r_type] = top5_df[barcode_col].tolist()
+                # 💡 [핵심 로직 변경] 선택한 범위에 따라 데이터를 Top 5로 자르거나, 전체를 유지합니다.
+                if self.report_range.get() == "top5":
+                    target_df = type_df.sort_values(by=['PROBLEM_QTY', 'MOVED_QTY'], ascending=[False, False]).head(5)
+                else:
+                    target_df = type_df.sort_values(by=['PROBLEM_QTY', 'MOVED_QTY'], ascending=[False, False])
+                
+                self.barcode_candidates[r_type] = target_df[barcode_col].tolist()
                 
                 merged = pd.merge(
-                    top5_df, 
+                    target_df, 
                     df_dive, 
                     left_on=[barcode_col, 'REPORT_DATE'], 
                     right_on=['상품바코드', dive_date_col], 
@@ -356,7 +365,6 @@ class ICQA_AutoReportApp(ctk.CTk):
         except:
             font_title = font_header = font_row = ImageFont.load_default()
 
-        # 💡 [핵심 해결 1] Problem QTY, Problem 건수 컬럼 너비를 95 -> 120으로 대폭 증가시켜 겹침 방지
         cols = [
             ("NO", 50), ("External ID", 110), ("SKU Name", 300), 
             ("Problem QTY", 120), ("Problem 건수", 120), 
@@ -402,7 +410,6 @@ class ICQA_AutoReportApp(ctk.CTk):
 
             draw.text((15, 20), title_wrap, font=font_title, fill='black', spacing=10)
 
-            # 표 헤더 그리기
             y_off = title_height
             draw.rectangle([0, y_off, table_width, y_off + header_height], fill=color_navy, outline=color_border)
             
@@ -410,13 +417,12 @@ class ICQA_AutoReportApp(ctk.CTk):
             for name, w in cols:
                 draw.rectangle([x_off, y_off, x_off+w, y_off + header_height], outline=color_border)
                 
-                # 💡 [핵심 해결 2] 글씨 길이를 측정해서 헤더 박스의 '정중앙'에 오도록 좌표를 계산 (쏠림 및 겹침 방지)
                 try:
                     text_bbox = font_header.getbbox(name)
                     text_w = text_bbox[2] - text_bbox[0]
                     text_h = text_bbox[3] - text_bbox[1]
                 except:
-                    text_w = len(name) * 8 # fallback
+                    text_w = len(name) * 8 
                     text_h = 14
                     
                 center_x = x_off + (w - text_w) / 2
