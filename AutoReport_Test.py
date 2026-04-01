@@ -102,17 +102,21 @@ class ICQA_AutoReportApp(ctk.CTk):
         if cleaned.endswith('.0'): cleaned = cleaned[:-2]
         return cleaned
 
+    # 💡 [수정 포인트 1] Raw Data 선택 시 파일 이름이 버튼에 나타나게 업그레이드!
     def load_raw_data(self):
         filepath = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
         if filepath:
             self.raw_filepath = filepath
-            self.btn_raw.configure(text="✅ 1. Raw Data 선택 완료", fg_color="gray")
+            filename = os.path.basename(filepath) # 폴더 경로 다 빼고 진짜 파일 이름만 쏙 뽑아옵니다.
+            self.btn_raw.configure(text=f"✅ {filename} (클릭하여 변경)", fg_color="#454545")
 
+    # 💡 [수정 포인트 2] Dive-Deep 선택 시 파일 이름이 버튼에 나타나게 업그레이드!
     def load_dive_data(self):
         filepath = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
         if filepath:
             self.dive_filepath = filepath
-            self.btn_dive.configure(text="✅ 2. Dive-Deep 선택 완료", fg_color="gray")
+            filename = os.path.basename(filepath)
+            self.btn_dive.configure(text=f"✅ {filename} (클릭하여 변경)", fg_color="#454545")
 
     def process_data(self):
         if not self.raw_filepath or not self.dive_filepath:
@@ -123,13 +127,18 @@ class ICQA_AutoReportApp(ctk.CTk):
             self.result_box.delete("1.0", tk.END)
             
             with open(self.raw_filepath, 'rb') as f:
-                df_raw = pd.read_excel(f, engine='openpyxl', dtype={'EXTERNALID': str, 'BARCODE': str})
+                df_raw = pd.read_excel(f, engine='openpyxl')
+            
+            df_raw.columns = df_raw.columns.str.strip().str.replace('\n', '')
             
             barcode_col = 'EXTERNALID' if 'EXTERNALID' in df_raw.columns else 'BARCODE'
+            if barcode_col in df_raw.columns:
+                df_raw[barcode_col] = df_raw[barcode_col].astype(str)
+
             req_raw = ['RESOLVETYPE', barcode_col, 'PROBLEM_QTY', 'MOVED_QTY', 'DESCRIPTION', 'REPORT_DATE']
             for col in req_raw:
                 if col not in df_raw.columns:
-                    messagebox.showerror("오류", f"Raw Data에 '{col}' 열이 없습니다!")
+                    messagebox.showerror("오류", f"Raw Data에 '{col}' 열이 없습니다!\n(열 이름 띄어쓰기를 확인해주세요)")
                     return
 
             df_raw['REPORT_DATE'] = pd.to_datetime(df_raw['REPORT_DATE'], errors='coerce').dt.strftime('%Y-%m-%d')
@@ -142,13 +151,18 @@ class ICQA_AutoReportApp(ctk.CTk):
             }).rename(columns={barcode_col: 'COUNT'}).reset_index()
 
             with open(self.dive_filepath, 'rb') as f:
-                df_dive = pd.read_excel(f, engine='openpyxl', dtype={'상품바코드': str})
+                df_dive = pd.read_excel(f, engine='openpyxl')
+            
+            df_dive.columns = df_dive.columns.str.strip().str.replace('\n', '')
+            
+            if '상품바코드' in df_dive.columns:
+                df_dive['상품바코드'] = df_dive['상품바코드'].astype(str)
             
             dive_date_col = 'Date' 
             req_dive = ['상품바코드', '문제유형', '사유', dive_date_col]
             for col in req_dive:
                 if col not in df_dive.columns:
-                    messagebox.showerror("오류", f"Dive-Deep 파일에 '{col}' 열이 없습니다!\n(열 이름 확인 필요)")
+                    messagebox.showerror("오류", f"Dive-Deep 파일에 '{col}' 열이 없습니다!\n(실제 열 이름: {list(df_dive.columns)})")
                     return
 
             df_dive[dive_date_col] = pd.to_datetime(df_dive[dive_date_col], errors='coerce').dt.strftime('%Y-%m-%d')
