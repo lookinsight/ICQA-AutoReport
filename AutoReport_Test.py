@@ -107,12 +107,11 @@ class ICQA_AutoReportApp(ctk.CTk):
         if cleaned.endswith('.0'): cleaned = cleaned[:-2]
         return cleaned
 
-    # 💡 [핵심 해결책 1] 초강력 바코드 세척기 (소수점 .0 귀신 퇴치)
     def clean_barcode(self, val):
         if pd.isna(val): return ""
         b = str(val).strip().upper()
         if b.endswith('.0'): 
-            b = b[:-2]  # 끝에 .0 이 붙어있으면 가차없이 잘라냅니다.
+            b = b[:-2]  
         return b
 
     def load_raw_data(self):
@@ -154,13 +153,11 @@ class ICQA_AutoReportApp(ctk.CTk):
         try:
             self.result_box.delete("1.0", tk.END)
             
-            # --- 1. Raw Data 처리 ---
             with open(self.raw_filepath, 'rb') as f:
                 df_raw = pd.read_excel(f, engine='openpyxl')
             
             df_raw.columns = df_raw.columns.str.strip().str.replace('\n', '')
             
-            # 바코드 열 찾기
             barcode_col = 'BARCODE' if 'BARCODE' in df_raw.columns else ('EXTERNALID' if 'EXTERNALID' in df_raw.columns else None)
             if not barcode_col:
                 messagebox.showerror("오류", "Raw Data에 'BARCODE' 또는 'EXTERNALID' 열이 없습니다!")
@@ -172,10 +169,8 @@ class ICQA_AutoReportApp(ctk.CTk):
                     messagebox.showerror("오류", f"Raw Data에 '{col}' 열이 없습니다!")
                     return
 
-            # 💡 [적용] Raw Data 바코드 다림질
             df_raw[barcode_col] = df_raw[barcode_col].apply(self.clean_barcode)
 
-            # Raw Data 날짜 필터링
             df_raw['REPORT_DATE'] = pd.to_datetime(df_raw['REPORT_DATE'], errors='coerce').dt.strftime('%Y-%m-%d')
             df_raw = df_raw[df_raw['REPORT_DATE'] == target_date]
             
@@ -190,8 +185,6 @@ class ICQA_AutoReportApp(ctk.CTk):
                 'DESCRIPTION': 'first' 
             }).rename(columns={barcode_col: 'COUNT'}).reset_index()
 
-
-            # --- 2. Dive-Deep Data 처리 ---
             with open(self.dive_filepath, 'rb') as f:
                 df_dive = pd.read_excel(f, engine='openpyxl')
             
@@ -204,18 +197,11 @@ class ICQA_AutoReportApp(ctk.CTk):
                     messagebox.showerror("오류", f"Dive-Deep 파일에 '{col}' 열이 없습니다!")
                     return
 
-            # 💡 [적용] Dive-Deep 바코드 다림질
             df_dive['상품바코드'] = df_dive['상품바코드'].apply(self.clean_barcode)
 
-            # Dive-Deep 날짜 필터링
             df_dive[dive_date_col] = pd.to_datetime(df_dive[dive_date_col], errors='coerce').dt.strftime('%Y-%m-%d')
             df_dive = df_dive[df_dive[dive_date_col] == target_date]
-            
-            # 💡 [경고 알림 추가] 만약 다 걸렀는데 Dive-Deep에 해당 날짜 데이터가 없다면?
-            if df_dive.empty:
-                messagebox.showwarning("데이터 경고", f"Dive-Deep(사유) 파일에 {target_date} 날짜의 데이터가 존재하지 않습니다!\n(날짜 형식을 확인하시거나 사유 파일이 최신인지 확인해주세요.)")
 
-            # --- 3. 완벽 매칭 (VLOOKUP) ---
             self.final_report_data = []
             resolve_types = grouped['RESOLVETYPE'].unique()
             
@@ -286,6 +272,7 @@ class ICQA_AutoReportApp(ctk.CTk):
         btn_finish = ctk.CTkButton(self.sel_win, text="✨ 선택 완료 및 표 이미지 생성 ✨", height=50, command=self.generate_final_tables)
         btn_finish.pack(pady=15)
 
+    # 💡 [핵심] 표 그리기 엔진 완벽 업그레이드! (고무줄 표 매직)
     def generate_final_tables(self):
         for item, combo in self.comboboxes:
             item['DEFECT_TYPE'] = combo.get()
@@ -305,14 +292,34 @@ class ICQA_AutoReportApp(ctk.CTk):
             ("Defect Type", 100), ("Dive-Deep", 400)
         ]
         table_width = sum([w for _, w in cols])
-        row_height = 60 
         title_height = 50
+        header_height = 40 # 헤더(제목줄) 높이 세팅
 
         df_final = pd.DataFrame(self.final_report_data)
         for r_type in df_final['RESOLVETYPE'].unique():
             type_data = df_final[df_final['RESOLVETYPE'] == r_type]
             
-            total_height = title_height + row_height + (len(type_data) * row_height)
+            # 💡 그리기 전에 모든 줄의 글자 길이를 분석해서, 각각 필요한 최적의 높이를 계산합니다!
+            row_heights = []
+            wrapped_rows = []
+            
+            for _, row in type_data.iterrows():
+                # 한글 너비 고려해서 넉넉하게 줄바꿈 (SKU: 한 줄당 20자, 사유: 26자)
+                sku_wrap = textwrap.fill(str(row['SKU_NAME']), width=20)
+                dive_wrap = textwrap.fill(str(row['DIVE_DEEP']), width=26)
+                
+                # 몇 줄짜리 글씨인지 셉니다.
+                max_lines = max(sku_wrap.count('\n'), dive_wrap.count('\n')) + 1
+                
+                # 1줄일때는 60픽셀, 줄이 늘어날수록 방 크기를 쭉쭉 늘립니다. (줄당 20픽셀 추가)
+                calc_height = max(60, (max_lines * 20) + 20) 
+                
+                row_heights.append(calc_height)
+                wrapped_rows.append((row, sku_wrap, dive_wrap))
+                
+            # 늘어난 방 크기를 다 합쳐서 최종 사진 크기를 정합니다.
+            total_height = title_height + header_height + sum(row_heights)
+            
             img = Image.new('RGB', (table_width, total_height), 'white')
             draw = ImageDraw.Draw(img)
 
@@ -321,34 +328,34 @@ class ICQA_AutoReportApp(ctk.CTk):
             draw.text((10, 10), f"[{r_type}] Problem Analysis", font=font_title, fill='black')
 
             y_off = title_height
-            draw.rectangle([0, y_off, table_width, y_off + row_height], fill=color_navy, outline=color_border)
+            draw.rectangle([0, y_off, table_width, y_off + header_height], fill=color_navy, outline=color_border)
             
             x_off = 0
             for name, w in cols:
-                draw.rectangle([x_off, y_off, x_off+w, y_off + row_height], outline=color_border)
-                draw.text((x_off + 10, y_off + 20), name, font=font_header, fill=color_white)
+                draw.rectangle([x_off, y_off, x_off+w, y_off + header_height], outline=color_border)
+                draw.text((x_off + 10, y_off + 12), name, font=font_header, fill=color_white)
                 x_off += w
 
-            y_off += row_height
-            for i, (_, row) in enumerate(type_data.iterrows()):
+            y_off += header_height
+            
+            for i, (row_data, sku_wrap, dive_wrap) in enumerate(wrapped_rows):
                 bg_color = color_white if i % 2 == 0 else color_iceblue
+                current_rh = row_heights[i] # 방금 계산한 이 줄만의 '고무줄 높이' 적용!
                 
-                sku_wrap = textwrap.fill(row['SKU_NAME'], width=22)
-                dive_wrap = textwrap.fill(row['DIVE_DEEP'], width=35)
-                
-                row_data = [
-                    str(row['RANK']), str(row['BARCODE']), sku_wrap, str(row['QTY']),
-                    str(row['COUNT']), row['PROB_TYPE'], row['RESOLVETYPE'], 
-                    row['DEFECT_TYPE'], dive_wrap
+                row_vals = [
+                    str(row_data['RANK']), str(row_data['BARCODE']), sku_wrap, str(row_data['QTY']),
+                    str(row_data['COUNT']), str(row_data['PROB_TYPE']), str(row_data['RESOLVETYPE']), 
+                    str(row_data['DEFECT_TYPE']), dive_wrap
                 ]
                 
                 x_off = 0
-                for j, (val, w) in enumerate(zip(row_data, [cw for _, cw in cols])):
-                    draw.rectangle([x_off, y_off, x_off+w, y_off + row_height], fill=bg_color, outline=color_border)
-                    draw.text((x_off + 10, y_off + 10), val, font=font_row, fill='black')
+                for j, (val, w) in enumerate(zip(row_vals, [cw for _, cw in cols])):
+                    draw.rectangle([x_off, y_off, x_off+w, y_off + current_rh], fill=bg_color, outline=color_border)
+                    # spacing 옵션으로 줄과 줄 사이 간격을 줘서 숨통을 트여줍니다.
+                    draw.text((x_off + 10, y_off + 10), val, font=font_row, fill='black', spacing=4) 
                     x_off += w
                 
-                y_off += row_height
+                y_off += current_rh
 
             safe_name = "".join([c for c in r_type if c.isalpha() or c.isdigit() or c in " _-"]).rstrip()
             img.save(f"Report_{safe_name}_Complete.png")
