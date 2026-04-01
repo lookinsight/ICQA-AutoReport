@@ -49,6 +49,13 @@ class ICQA_AutoReportApp(ctk.CTk):
         self.btn_dive = ctk.CTkButton(frame_excel, text="📁 2. Dive-Deep(사유) 엑셀 선택", fg_color="#2B547E", height=40, command=self.load_dive_data)
         self.btn_dive.pack(pady=5, padx=20, fill="x")
 
+        # 💡 [새 기능!] 보고 날짜 선택기 추가
+        frame_date = ctk.CTkFrame(frame_excel, fg_color="transparent")
+        frame_date.pack(pady=(10, 5), padx=20, fill="x")
+        ctk.CTkLabel(frame_date, text="📅 보고 대상 날짜:", font=("Arial", 14, "bold")).pack(side="left", padx=(0, 10))
+        self.date_combo = ctk.CTkComboBox(frame_date, values=["Raw Data를 먼저 넣어주세요"], width=180)
+        self.date_combo.pack(side="left")
+
         self.btn_run = ctk.CTkButton(frame_excel, text="🚀 VLOOKUP 병합 및 Defect Type 선택", fg_color="green", hover_color="darkgreen", height=45, command=self.process_data)
         self.btn_run.pack(pady=15, padx=20, fill="x")
 
@@ -102,15 +109,27 @@ class ICQA_AutoReportApp(ctk.CTk):
         if cleaned.endswith('.0'): cleaned = cleaned[:-2]
         return cleaned
 
-    # 💡 [수정 포인트 1] Raw Data 선택 시 파일 이름이 버튼에 나타나게 업그레이드!
     def load_raw_data(self):
         filepath = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
         if filepath:
             self.raw_filepath = filepath
-            filename = os.path.basename(filepath) # 폴더 경로 다 빼고 진짜 파일 이름만 쏙 뽑아옵니다.
+            filename = os.path.basename(filepath)
             self.btn_raw.configure(text=f"✅ {filename} (클릭하여 변경)", fg_color="#454545")
+            
+            # 💡 [핵심] Raw Data를 쓱 읽어서 존재하는 날짜들을 콤보박스에 넣어줍니다!
+            try:
+                df = pd.read_excel(filepath, engine='openpyxl')
+                df.columns = df.columns.str.strip().str.replace('\n', '')
+                if 'REPORT_DATE' in df.columns:
+                    # 날짜 형식으로 변환 후 YYYY-MM-DD 모양만 추출
+                    dates = pd.to_datetime(df['REPORT_DATE'], errors='coerce').dt.strftime('%Y-%m-%d').dropna().unique().tolist()
+                    dates.sort(reverse=True) # 최신 날짜가 맨 위로 오게 정렬
+                    if dates:
+                        self.date_combo.configure(values=dates)
+                        self.date_combo.set(dates[0]) # 제일 최신 날짜로 자동 세팅
+            except Exception as e:
+                print(f"날짜 불러오기 실패: {e}")
 
-    # 💡 [수정 포인트 2] Dive-Deep 선택 시 파일 이름이 버튼에 나타나게 업그레이드!
     def load_dive_data(self):
         filepath = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
         if filepath:
@@ -122,6 +141,11 @@ class ICQA_AutoReportApp(ctk.CTk):
         if not self.raw_filepath or not self.dive_filepath:
             messagebox.showwarning("경고", "Raw Data와 Dive-Deep 엑셀 파일을 모두 선택해주세요!")
             return
+            
+        target_date = self.date_combo.get()
+        if not target_date or target_date == "Raw Data를 먼저 넣어주세요":
+            messagebox.showwarning("경고", "보고 대상 날짜를 선택해주세요!")
+            return
 
         try:
             self.result_box.delete("1.0", tk.END)
@@ -131,9 +155,14 @@ class ICQA_AutoReportApp(ctk.CTk):
             
             df_raw.columns = df_raw.columns.str.strip().str.replace('\n', '')
             
-            barcode_col = 'EXTERNALID' if 'EXTERNALID' in df_raw.columns else 'BARCODE'
-            if barcode_col in df_raw.columns:
-                df_raw[barcode_col] = df_raw[barcode_col].astype(str)
+            # 💡 BARCODE를 우선적으로 찾습니다! (Dive-Deep의 상품바코드와 매칭 확률 높이기)
+            barcode_col = 'BARCODE' if 'BARCODE' in df_raw.columns else ('EXTERNALID' if 'EXTERNALID' in df_raw.columns else None)
+            
+            if not barcode_col:
+                messagebox.showerror("오류", "Raw Data에 'BARCODE' 또는 'EXTERNALID' 열이 없습니다!")
+                return
+                
+            df_raw[barcode_col] = df_raw[barcode_col].astype(str)
 
             req_raw = ['RESOLVETYPE', barcode_col, 'PROBLEM_QTY', 'MOVED_QTY', 'DESCRIPTION', 'REPORT_DATE']
             for col in req_raw:
@@ -141,7 +170,13 @@ class ICQA_AutoReportApp(ctk.CTk):
                     messagebox.showerror("오류", f"Raw Data에 '{col}' 열이 없습니다!\n(열 이름 띄어쓰기를 확인해주세요)")
                     return
 
+            # 날짜 변환 및 💡타겟 날짜만 쏙 필터링!
             df_raw['REPORT_DATE'] = pd.to_datetime(df_raw['REPORT_DATE'], errors='coerce').dt.strftime('%Y-%m-%d')
+            df_raw = df_raw[df_raw['REPORT_DATE'] == target_date]
+            
+            if df_raw.empty:
+                messagebox.showinfo("알림", f"선택하신 날짜({target_date})의 데이터가 Raw 파일에 존재하지 않습니다.")
+                return
 
             grouped = df_raw.groupby(['RESOLVETYPE', barcode_col, 'REPORT_DATE']).agg({
                 'PROBLEM_QTY': 'sum',
@@ -165,7 +200,9 @@ class ICQA_AutoReportApp(ctk.CTk):
                     messagebox.showerror("오류", f"Dive-Deep 파일에 '{col}' 열이 없습니다!\n(실제 열 이름: {list(df_dive.columns)})")
                     return
 
+            # 날짜 변환 및 💡타겟 날짜만 쏙 필터링!
             df_dive[dive_date_col] = pd.to_datetime(df_dive[dive_date_col], errors='coerce').dt.strftime('%Y-%m-%d')
+            df_dive = df_dive[df_dive[dive_date_col] == target_date]
 
             self.final_report_data = []
             resolve_types = grouped['RESOLVETYPE'].unique()
