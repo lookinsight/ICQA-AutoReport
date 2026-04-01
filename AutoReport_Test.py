@@ -9,6 +9,7 @@ import ctypes
 import json
 import textwrap
 from datetime import datetime
+import random
 
 # 윈도우 디스플레이 배율 무시
 try:
@@ -25,7 +26,7 @@ class ICQA_AutoReportApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("AutoReport_test")
-        self.center_window(self, 550, 800)
+        self.center_window(self, 550, 850)
         
         self.raw_filepath = None
         self.dive_filepath = None
@@ -34,6 +35,7 @@ class ICQA_AutoReportApp(ctk.CTk):
         self.load_coords()
         self.remote = None 
         self.guide_win = None
+        self.barcode_candidates = {} 
 
         # ==========================================
         # 📊 [1단계] 엑셀 데이터 파일 선택 UI
@@ -49,7 +51,6 @@ class ICQA_AutoReportApp(ctk.CTk):
         self.btn_dive = ctk.CTkButton(frame_excel, text="📁 2. Dive-Deep(사유) 엑셀 선택", fg_color="#2B547E", height=40, command=self.load_dive_data)
         self.btn_dive.pack(pady=5, padx=20, fill="x")
 
-        # 📅 보고 날짜 선택기
         frame_date = ctk.CTkFrame(frame_excel, fg_color="transparent")
         frame_date.pack(pady=(10, 5), padx=20, fill="x")
         ctk.CTkLabel(frame_date, text="📅 보고 대상 날짜:", font=("Arial", 14, "bold")).pack(side="left", padx=(0, 10))
@@ -59,9 +60,16 @@ class ICQA_AutoReportApp(ctk.CTk):
         self.btn_run = ctk.CTkButton(frame_excel, text="🚀 VLOOKUP 병합 및 Defect Type 선택", fg_color="green", hover_color="darkgreen", height=45, command=self.process_data)
         self.btn_run.pack(pady=15, padx=20, fill="x")
 
-        ctk.CTkLabel(frame_excel, text="👇 [카톡 검색용] 각 유형별 1위 바코드", font=("Arial", 12, "bold"), text_color="yellow").pack(pady=(0, 2))
+        self.barcode_mode = ctk.StringVar(value="top1")
+        frame_barcode_opt = ctk.CTkFrame(frame_excel, fg_color="transparent")
+        frame_barcode_opt.pack(padx=20, pady=(5, 0), fill="x")
+        
+        ctk.CTkLabel(frame_barcode_opt, text="👇 [카톡 검색용] 바코드 추출 방식:", font=("Arial", 12, "bold"), text_color="yellow").pack(side="left")
+        ctk.CTkRadioButton(frame_barcode_opt, text="1위 바코드", variable=self.barcode_mode, value="top1", command=self.update_barcode_text).pack(side="left", padx=(10, 5))
+        ctk.CTkRadioButton(frame_barcode_opt, text="🎲랜덤 바코드", variable=self.barcode_mode, value="random", command=self.update_barcode_text).pack(side="left", padx=5)
+
         self.result_box = ctk.CTkTextbox(frame_excel, height=80, font=("Arial", 14))
-        self.result_box.pack(padx=20, pady=(0, 10), fill="x")
+        self.result_box.pack(padx=20, pady=(5, 10), fill="x")
 
         # ==========================================
         # 📸 [2단계] 파워 BI 캡처 리모컨 UI
@@ -90,7 +98,6 @@ class ICQA_AutoReportApp(ctk.CTk):
         remote_btn = ctk.CTkButton(frame_capture, text="🎛️ 항상 위 리모컨 띄우기", fg_color="#E56717", hover_color="#C35613", height=40, command=self.open_remote)
         remote_btn.pack(pady=15, padx=20, fill="x")
 
-        # 워터마크
         footer_label = ctk.CTkLabel(self, text="💡 Developed by 룩희 & 재민", font=("Arial", 12, "bold", "italic"), text_color="gray")
         footer_label.pack(side="bottom", pady=10)
 
@@ -151,8 +158,6 @@ class ICQA_AutoReportApp(ctk.CTk):
             return
 
         try:
-            self.result_box.delete("1.0", tk.END)
-            
             with open(self.raw_filepath, 'rb') as f:
                 df_raw = pd.read_excel(f, engine='openpyxl')
             
@@ -170,7 +175,6 @@ class ICQA_AutoReportApp(ctk.CTk):
                     return
 
             df_raw[barcode_col] = df_raw[barcode_col].apply(self.clean_barcode)
-
             df_raw['REPORT_DATE'] = pd.to_datetime(df_raw['REPORT_DATE'], errors='coerce').dt.strftime('%Y-%m-%d')
             df_raw = df_raw[df_raw['REPORT_DATE'] == target_date]
             
@@ -189,8 +193,8 @@ class ICQA_AutoReportApp(ctk.CTk):
                 df_dive = pd.read_excel(f, engine='openpyxl')
             
             df_dive.columns = df_dive.columns.str.strip().str.replace('\n', '')
-            
             dive_date_col = 'Date' 
+            
             req_dive = ['상품바코드', '문제유형', '사유', dive_date_col]
             for col in req_dive:
                 if col not in df_dive.columns:
@@ -198,16 +202,19 @@ class ICQA_AutoReportApp(ctk.CTk):
                     return
 
             df_dive['상품바코드'] = df_dive['상품바코드'].apply(self.clean_barcode)
-
             df_dive[dive_date_col] = pd.to_datetime(df_dive[dive_date_col], errors='coerce').dt.strftime('%Y-%m-%d')
             df_dive = df_dive[df_dive[dive_date_col] == target_date]
 
             self.final_report_data = []
+            self.barcode_candidates = {} 
+            
             resolve_types = grouped['RESOLVETYPE'].unique()
             
             for r_type in resolve_types:
                 type_df = grouped[grouped['RESOLVETYPE'] == r_type].copy()
                 top5_df = type_df.sort_values(by=['PROBLEM_QTY', 'MOVED_QTY'], ascending=[False, False]).head(5)
+                
+                self.barcode_candidates[r_type] = top5_df[barcode_col].tolist()
                 
                 merged = pd.merge(
                     top5_df, 
@@ -229,11 +236,8 @@ class ICQA_AutoReportApp(ctk.CTk):
                         'DIVE_DEEP': self.clean_text(row['사유']),
                         'DEFECT_TYPE': 'Found' 
                     })
-                
-                if not top5_df.empty:
-                    clean_barcode = self.clean_text(top5_df.iloc[0][barcode_col])
-                    self.result_box.insert(tk.END, f"[{r_type}] 검색 바코드: {clean_barcode}\n")
-
+            
+            self.update_barcode_text()
             self.open_defect_selector()
 
         except PermissionError:
@@ -241,41 +245,68 @@ class ICQA_AutoReportApp(ctk.CTk):
         except Exception as e:
             messagebox.showerror("에러 발생", f"실행 중 문제가 발생했습니다:\n{str(e)}")
 
+    def update_barcode_text(self):
+        self.result_box.delete("1.0", tk.END)
+        mode = self.barcode_mode.get()
+        
+        for r_type, barcodes in self.barcode_candidates.items():
+            if not barcodes: continue
+            
+            if mode == "top1":
+                selected_barcode = barcodes[0] 
+            else:
+                selected_barcode = random.choice(barcodes) 
+                
+            clean_b = self.clean_barcode(selected_barcode)
+            self.result_box.insert(tk.END, f"[{r_type}] 검색 바코드: {clean_b}\n")
+
     def open_defect_selector(self):
         self.sel_win = ctk.CTkToplevel(self)
-        self.sel_win.title("Defect Type 선택 (결재)")
-        self.center_window(self.sel_win, 800, 600)
+        self.sel_win.title("Defect Type 및 사유 입력 (결재)")
+        self.center_window(self.sel_win, 850, 650)
         self.sel_win.attributes("-topmost", True)
         self.sel_win.grab_set() 
 
-        ctk.CTkLabel(self.sel_win, text="📌 추출된 바코드의 Defect Type을 선택해주세요.", font=("Arial", 16, "bold")).pack(pady=15)
+        ctk.CTkLabel(self.sel_win, text="📌 Defect Type을 선택하고 누락된 사유를 입력해주세요.", font=("Arial", 16, "bold")).pack(pady=15)
 
-        scroll_frame = ctk.CTkScrollableFrame(self.sel_win, width=750, height=450)
+        scroll_frame = ctk.CTkScrollableFrame(self.sel_win, width=800, height=480)
         scroll_frame.pack(pady=10, padx=20, fill="both", expand=True)
 
-        self.comboboxes = []
+        self.entries_data = [] 
         
         for i, item in enumerate(self.final_report_data):
             row_frame = ctk.CTkFrame(scroll_frame)
             row_frame.pack(fill="x", pady=5, padx=5)
             
-            dive_text = item['DIVE_DEEP'][:15] + "..." if item['DIVE_DEEP'] else "사유 미기재(또는 날짜 불일치)"
-            info_text = f"[{item['RESOLVETYPE']}] 바코드: {item['BARCODE']} | 수량: {item['QTY']} | 사유: {dive_text}"
+            top_frame = ctk.CTkFrame(row_frame, fg_color="transparent")
+            top_frame.pack(fill="x", padx=10, pady=(10, 2))
             
-            ctk.CTkLabel(row_frame, text=info_text, width=500, anchor="w").pack(side="left", padx=10, pady=10)
+            info_text = f"[{item['RESOLVETYPE']}] 바코드: {item['BARCODE']} | 문제수량: {item['QTY']}"
+            ctk.CTkLabel(top_frame, text=info_text, font=("Arial", 14, "bold")).pack(side="left")
             
-            combo = ctk.CTkComboBox(row_frame, values=["Found", "Loss", "DAMAGED_SKU"], width=150)
+            combo = ctk.CTkComboBox(top_frame, values=["Found", "Loss", "DAMAGED_SKU"], width=130)
             combo.set("Found")
-            combo.pack(side="right", padx=10, pady=10)
-            self.comboboxes.append((item, combo))
+            combo.pack(side="right")
+            
+            bot_frame = ctk.CTkFrame(row_frame, fg_color="transparent")
+            bot_frame.pack(fill="x", padx=10, pady=(0, 10))
+            
+            ctk.CTkLabel(bot_frame, text="✏️ 사유 입력/수정:", font=("Arial", 12, "bold"), text_color="#F3E5AB").pack(side="left")
+            entry = ctk.CTkEntry(bot_frame, font=("Arial", 13))
+            entry.pack(side="left", fill="x", expand=True, padx=(10, 0))
+            
+            dive_text = item['DIVE_DEEP'] if item['DIVE_DEEP'] else "사유 미기재"
+            entry.insert(0, dive_text)
+            
+            self.entries_data.append((item, combo, entry))
 
-        btn_finish = ctk.CTkButton(self.sel_win, text="✨ 선택 완료 및 표 이미지 생성 ✨", height=50, command=self.generate_final_tables)
+        btn_finish = ctk.CTkButton(self.sel_win, text="✨ 입력 완료 및 표 이미지 생성 ✨", height=50, command=self.generate_final_tables)
         btn_finish.pack(pady=15)
 
-    # 💡 [핵심] 표 그리기 엔진 완벽 업그레이드! (고무줄 표 매직)
     def generate_final_tables(self):
-        for item, combo in self.comboboxes:
+        for item, combo, entry in self.entries_data:
             item['DEFECT_TYPE'] = combo.get()
+            item['DIVE_DEEP'] = entry.get() 
         
         self.sel_win.destroy() 
         
@@ -286,46 +317,49 @@ class ICQA_AutoReportApp(ctk.CTk):
         except:
             font_title = font_header = font_row = ImageFont.load_default()
 
+        # 열 제목이 잘리지 않게 너비를 살짝 더 넉넉하게 줬습니다.
         cols = [
-            ("NO", 50), ("External ID", 110), ("SKU Name", 300), ("Problem QTY", 90), 
-            ("Problem 건수", 90), ("Problem Type", 120), ("Solve Type", 120), 
+            ("NO", 50), ("External ID", 110), ("SKU Name", 300), ("Problem QTY", 95), 
+            ("Problem 건수", 95), ("Problem Type", 120), ("Solve Type", 120), 
             ("Defect Type", 100), ("Dive-Deep", 400)
         ]
         table_width = sum([w for _, w in cols])
-        title_height = 50
-        header_height = 40 # 헤더(제목줄) 높이 세팅
+        header_height = 40 
 
         df_final = pd.DataFrame(self.final_report_data)
         for r_type in df_final['RESOLVETYPE'].unique():
             type_data = df_final[df_final['RESOLVETYPE'] == r_type]
             
-            # 💡 그리기 전에 모든 줄의 글자 길이를 분석해서, 각각 필요한 최적의 높이를 계산합니다!
+            # 💡 [핵심] 표 대제목(Title) 가로 잘림 방어벽!
+            raw_title = f"[{r_type}] Problem Analysis"
+            title_wrap = textwrap.fill(raw_title, width=65) # 글자가 가로로 너무 길면 아랫줄로 넘깁니다.
+            title_lines = title_wrap.count('\n') + 1
+            
+            # 제목이 몇 줄이냐에 따라서 맨 위쪽 공간을 알아서 늘려줍니다.
+            title_height = max(70, title_lines * 35 + 30) 
+
             row_heights = []
             wrapped_rows = []
             
             for _, row in type_data.iterrows():
-                # 한글 너비 고려해서 넉넉하게 줄바꿈 (SKU: 한 줄당 20자, 사유: 26자)
                 sku_wrap = textwrap.fill(str(row['SKU_NAME']), width=20)
                 dive_wrap = textwrap.fill(str(row['DIVE_DEEP']), width=26)
                 
-                # 몇 줄짜리 글씨인지 셉니다.
                 max_lines = max(sku_wrap.count('\n'), dive_wrap.count('\n')) + 1
-                
-                # 1줄일때는 60픽셀, 줄이 늘어날수록 방 크기를 쭉쭉 늘립니다. (줄당 20픽셀 추가)
                 calc_height = max(60, (max_lines * 20) + 20) 
                 
                 row_heights.append(calc_height)
                 wrapped_rows.append((row, sku_wrap, dive_wrap))
                 
-            # 늘어난 방 크기를 다 합쳐서 최종 사진 크기를 정합니다.
-            total_height = title_height + header_height + sum(row_heights)
+            total_height = title_height + header_height + sum(row_heights) + 20
             
             img = Image.new('RGB', (table_width, total_height), 'white')
             draw = ImageDraw.Draw(img)
 
             color_navy = '#1A365D'; color_white = '#FFFFFF'; color_iceblue = '#F0F4F8'; color_border = '#808080'
 
-            draw.text((10, 10), f"[{r_type}] Problem Analysis", font=font_title, fill='black')
+            # 💡 줄바꿈 처리된 제목을 넉넉한 공간에 그립니다.
+            draw.text((15, 20), title_wrap, font=font_title, fill='black', spacing=8)
 
             y_off = title_height
             draw.rectangle([0, y_off, table_width, y_off + header_height], fill=color_navy, outline=color_border)
@@ -340,7 +374,7 @@ class ICQA_AutoReportApp(ctk.CTk):
             
             for i, (row_data, sku_wrap, dive_wrap) in enumerate(wrapped_rows):
                 bg_color = color_white if i % 2 == 0 else color_iceblue
-                current_rh = row_heights[i] # 방금 계산한 이 줄만의 '고무줄 높이' 적용!
+                current_rh = row_heights[i]
                 
                 row_vals = [
                     str(row_data['RANK']), str(row_data['BARCODE']), sku_wrap, str(row_data['QTY']),
@@ -351,7 +385,6 @@ class ICQA_AutoReportApp(ctk.CTk):
                 x_off = 0
                 for j, (val, w) in enumerate(zip(row_vals, [cw for _, cw in cols])):
                     draw.rectangle([x_off, y_off, x_off+w, y_off + current_rh], fill=bg_color, outline=color_border)
-                    # spacing 옵션으로 줄과 줄 사이 간격을 줘서 숨통을 트여줍니다.
                     draw.text((x_off + 10, y_off + 10), val, font=font_row, fill='black', spacing=4) 
                     x_off += w
                 
