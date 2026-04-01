@@ -317,7 +317,6 @@ class ICQA_AutoReportApp(ctk.CTk):
         except:
             font_title = font_header = font_row = ImageFont.load_default()
 
-        # 열 제목이 잘리지 않게 너비를 살짝 더 넉넉하게 줬습니다.
         cols = [
             ("NO", 50), ("External ID", 110), ("SKU Name", 300), ("Problem QTY", 95), 
             ("Problem 건수", 95), ("Problem Type", 120), ("Solve Type", 120), 
@@ -330,12 +329,11 @@ class ICQA_AutoReportApp(ctk.CTk):
         for r_type in df_final['RESOLVETYPE'].unique():
             type_data = df_final[df_final['RESOLVETYPE'] == r_type]
             
-            # 💡 [핵심] 표 대제목(Title) 가로 잘림 방어벽!
+            # 💡 [핵심 방어벽] 65글자 -> 45글자로 타이트하게 묶어서 오른쪽 벽 충돌 완전 차단!
             raw_title = f"[{r_type}] Problem Analysis"
-            title_wrap = textwrap.fill(raw_title, width=65) # 글자가 가로로 너무 길면 아랫줄로 넘깁니다.
+            title_wrap = textwrap.fill(raw_title, width=45) 
             title_lines = title_wrap.count('\n') + 1
             
-            # 제목이 몇 줄이냐에 따라서 맨 위쪽 공간을 알아서 늘려줍니다.
             title_height = max(70, title_lines * 35 + 30) 
 
             row_heights = []
@@ -358,7 +356,6 @@ class ICQA_AutoReportApp(ctk.CTk):
 
             color_navy = '#1A365D'; color_white = '#FFFFFF'; color_iceblue = '#F0F4F8'; color_border = '#808080'
 
-            # 💡 줄바꿈 처리된 제목을 넉넉한 공간에 그립니다.
             draw.text((15, 20), title_wrap, font=font_title, fill='black', spacing=8)
 
             y_off = title_height
