@@ -121,6 +121,33 @@ class ICQA_AutoReportApp(ctk.CTk):
             b = b[:-2]  
         return b
 
+    # 💡 [핵심 신무기] 띄어쓰기가 없어도 픽셀 단위로 정확히 재서 강제로 잘라버리는 함수!
+    def force_pixel_wrap(self, text, font, max_width):
+        if not text: return ""
+        lines = []
+        current_line = ""
+        for char in str(text):
+            test_line = current_line + char
+            # 폰트 길이를 측정합니다
+            try:
+                w = font.getlength(test_line)
+            except:
+                try:
+                    w = font.getsize(test_line)[0]
+                except:
+                    bbox = font.getbbox(test_line)
+                    w = bbox[2] if bbox else 0
+            
+            # 폭이 한계치를 넘으면 얄짤없이 다음 줄로 넘깁니다.
+            if w > max_width:
+                lines.append(current_line)
+                current_line = char
+            else:
+                current_line = test_line
+        if current_line:
+            lines.append(current_line)
+        return "\n".join(lines)
+
     def load_raw_data(self):
         filepath = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
         if filepath:
@@ -329,12 +356,15 @@ class ICQA_AutoReportApp(ctk.CTk):
         for r_type in df_final['RESOLVETYPE'].unique():
             type_data = df_final[df_final['RESOLVETYPE'] == r_type]
             
-            # 💡 [핵심 방어벽] 65글자 -> 45글자로 타이트하게 묶어서 오른쪽 벽 충돌 완전 차단!
             raw_title = f"[{r_type}] Problem Analysis"
-            title_wrap = textwrap.fill(raw_title, width=45) 
+            
+            # 💡 [필살기] 표 가로 길이에서 40픽셀 안전거리 남기고 픽셀 단위로 잘라버립니다!
+            safe_width = table_width - 40 
+            title_wrap = self.force_pixel_wrap(raw_title, font_title, safe_width)
             title_lines = title_wrap.count('\n') + 1
             
-            title_height = max(70, title_lines * 35 + 30) 
+            # 1줄당 40픽셀의 넉넉한 높이를 할당합니다.
+            title_height = (title_lines * 40) + 30 
 
             row_heights = []
             wrapped_rows = []
@@ -356,8 +386,13 @@ class ICQA_AutoReportApp(ctk.CTk):
 
             color_navy = '#1A365D'; color_white = '#FFFFFF'; color_iceblue = '#F0F4F8'; color_border = '#808080'
 
-            draw.text((15, 20), title_wrap, font=font_title, fill='black', spacing=8)
+            # 💡 표 전체 외곽선을 그려서 옆 선 뚫림 현상을 눈으로 원천 차단!
+            draw.rectangle([0, 0, table_width-1, total_height-1], outline=color_border, width=2)
 
+            # 제목 그리기 (왼쪽 여백 15, 위쪽 넉넉하게 20)
+            draw.text((15, 20), title_wrap, font=font_title, fill='black', spacing=10)
+
+            # 표 그리기
             y_off = title_height
             draw.rectangle([0, y_off, table_width, y_off + header_height], fill=color_navy, outline=color_border)
             
