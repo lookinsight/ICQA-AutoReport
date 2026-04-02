@@ -64,7 +64,7 @@ class ICQA_AutoReportApp(ctk.CTk):
         self.entry_sku_delete = ctk.CTkEntry(frame_delete, placeholder_text="표에서 지울 SKU Name (선택)", width=230)
         self.entry_sku_delete.pack(side="left")
 
-        # 💡 [새 기능] 보고 범위 선택 UI (Top 5 vs 전체)
+        # 보고 범위 선택 UI (Top 5 vs 전체)
         self.report_range = ctk.StringVar(value="top5")
         frame_range_opt = ctk.CTkFrame(frame_excel, fg_color="transparent")
         frame_range_opt.pack(padx=20, pady=(5, 0), fill="x")
@@ -232,21 +232,38 @@ class ICQA_AutoReportApp(ctk.CTk):
                 'DESCRIPTION': 'first' 
             }).rename(columns={barcode_col: 'COUNT'}).reset_index()
 
+            # ==========================================
+            # 💡 Dive-Deep 파일 읽어오기 (완벽 방어 버전)
+            # ==========================================
             with open(self.dive_filepath, 'rb') as f:
-                df_dive = pd.read_excel(f, engine='openpyxl')
-            
-            df_dive.columns = df_dive.columns.str.strip().str.replace('\n', '')
-            dive_date_col = 'Date' 
-            
-            req_dive = ['상품바코드', '문제유형', '사유', dive_date_col]
-            for col in req_dive:
-                if col not in df_dive.columns:
-                    messagebox.showerror("오류", f"Dive-Deep 파일에 '{col}' 열이 없습니다!")
+                xls = pd.ExcelFile(f, engine='openpyxl')
+                valid_dfs = []
+                
+                dive_date_col = 'Date' 
+                req_dive = ['상품바코드', '문제유형', '사유', dive_date_col]
+                
+                for sheet_name in xls.sheet_names:
+                    temp_df = pd.read_excel(xls, sheet_name=sheet_name)
+                    
+                    # 공백 압착 및 컬럼명 정리
+                    clean_cols = temp_df.columns.astype(str).str.strip().str.replace('\n', '').str.replace(' ', '')
+                    temp_df.columns = clean_cols 
+                    
+                    if all(col in clean_cols for col in req_dive):
+                        valid_dfs.append(temp_df)
+                        print(f"✅ 유효한 양식의 시트 발견 및 합치기 대기: [{sheet_name}]")
+                
+                if not valid_dfs:
+                    messagebox.showerror("오류", f"어떤 시트에서도 필수 열({req_dive})을 모두 찾을 수 없습니다!\n엑셀 양식을 다시 확인해주세요.")
                     return
+                
+                # 유효한 시트 모두 합치기
+                df_dive = pd.concat(valid_dfs, ignore_index=True)
 
             df_dive['상품바코드'] = df_dive['상품바코드'].apply(self.clean_barcode)
             df_dive[dive_date_col] = pd.to_datetime(df_dive[dive_date_col], errors='coerce').dt.strftime('%Y-%m-%d')
             df_dive = df_dive[df_dive[dive_date_col] == target_date]
+            # ==========================================
 
             self.final_report_data = []
             self.barcode_candidates = {} 
@@ -256,7 +273,6 @@ class ICQA_AutoReportApp(ctk.CTk):
             for r_type in resolve_types:
                 type_df = grouped[grouped['RESOLVETYPE'] == r_type].copy()
                 
-                # 💡 [핵심 로직 변경] 선택한 범위에 따라 데이터를 Top 5로 자르거나, 전체를 유지합니다.
                 if self.report_range.get() == "top5":
                     target_df = type_df.sort_values(by=['PROBLEM_QTY', 'MOVED_QTY'], ascending=[False, False]).head(5)
                 else:
@@ -365,6 +381,7 @@ class ICQA_AutoReportApp(ctk.CTk):
         except:
             font_title = font_header = font_row = ImageFont.load_default()
 
+        # 💡 Problem QTY, 건수 폭을 넓히고 여백을 확보한 최적화된 열 너비
         cols = [
             ("NO", 50), ("External ID", 110), ("SKU Name", 300), 
             ("Problem QTY", 120), ("Problem 건수", 120), 
@@ -407,7 +424,6 @@ class ICQA_AutoReportApp(ctk.CTk):
             color_navy = '#1A365D'; color_white = '#FFFFFF'; color_iceblue = '#F0F4F8'; color_border = '#808080'
 
             draw.rectangle([0, 0, table_width-1, total_height-1], outline=color_border, width=2)
-
             draw.text((15, 20), title_wrap, font=font_title, fill='black', spacing=10)
 
             y_off = title_height
@@ -417,6 +433,7 @@ class ICQA_AutoReportApp(ctk.CTk):
             for name, w in cols:
                 draw.rectangle([x_off, y_off, x_off+w, y_off + header_height], outline=color_border)
                 
+                # 💡 텍스트가 정확히 박스의 정중앙에 위치하도록 측정 및 오프셋 계산
                 try:
                     text_bbox = font_header.getbbox(name)
                     text_w = text_bbox[2] - text_bbox[0]
