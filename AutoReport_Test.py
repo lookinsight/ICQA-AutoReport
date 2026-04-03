@@ -26,7 +26,7 @@ class ICQA_AutoReportApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("AutoReport_test")
-        self.center_window(self, 550, 800) # 제외 상품명 UI가 빠졌으니 창 높이를 800으로 줄임
+        self.center_window(self, 550, 800) 
         
         self.raw_filepath = None
         self.dive_filepath = None
@@ -56,8 +56,6 @@ class ICQA_AutoReportApp(ctk.CTk):
         ctk.CTkLabel(frame_date, text="📅 보고 대상 날짜:", font=("Arial", 14, "bold")).pack(side="left", padx=(0, 10))
         self.date_combo = ctk.CTkComboBox(frame_date, values=["Raw Data를 먼저 넣어주세요"], width=180)
         self.date_combo.pack(side="left")
-
-        # 💡 [삭제 완료] 제외 상품명 UI가 있던 자리를 깔끔하게 비웠습니다!
 
         self.report_range = ctk.StringVar(value="top5")
         frame_range_opt = ctk.CTkFrame(frame_excel, fg_color="transparent")
@@ -129,11 +127,17 @@ class ICQA_AutoReportApp(ctk.CTk):
             b = b[:-2]  
         return b
 
+    # 💡 [핵심 수정] 기존 엑셀에 있던 쓸데없는 엔터를 싹 무시하고 일렬로 쭉 펴서 새로 자릅니다!
     def force_pixel_wrap(self, text, font, max_width):
         if not text: return ""
+        # 1. 엑셀의 강제 줄바꿈(\n, \r)을 스페이스바로 다 바꿔버립니다.
+        text = str(text).replace('\n', ' ').replace('\r', '').strip()
+        # 2. 스페이스바가 여러 개 연속으로 있으면 한 개로 예쁘게 줄여줍니다.
+        text = " ".join(text.split())
+        
         lines = []
         current_line = ""
-        for char in str(text):
+        for char in text:
             test_line = current_line + char
             try:
                 w = font.getlength(test_line)
@@ -201,8 +205,8 @@ class ICQA_AutoReportApp(ctk.CTk):
                 return
                 
             req_raw = ['RESOLVETYPE', barcode_col, 'PROBLEM_QTY', 'MOVED_QTY', 'DESCRIPTION', 'REPORT_DATE']
-            has_external_id = 'EXTERNALID' in df_raw.columns
-            if has_external_id and 'EXTERNALID' not in req_raw:
+            self.has_external_id = 'EXTERNALID' in df_raw.columns
+            if self.has_external_id and 'EXTERNALID' not in req_raw:
                 req_raw.append('EXTERNALID')
                 
             for col in req_raw:
@@ -211,13 +215,11 @@ class ICQA_AutoReportApp(ctk.CTk):
                     return
 
             df_raw[barcode_col] = df_raw[barcode_col].apply(self.clean_barcode)
-            if has_external_id:
+            if self.has_external_id:
                 df_raw['EXTERNALID'] = df_raw['EXTERNALID'].astype(str)
                 
             df_raw['REPORT_DATE'] = pd.to_datetime(df_raw['REPORT_DATE'], errors='coerce').dt.strftime('%Y-%m-%d')
             df_raw = df_raw[df_raw['REPORT_DATE'] == target_date]
-            
-            # 💡 [삭제 완료] 제외 상품명 로직이 완벽하게 삭제되었습니다!
             
             if df_raw.empty:
                 messagebox.showinfo("알림", f"Raw Data 파일에 {target_date} 날짜의 데이터가 없습니다.")
@@ -229,7 +231,7 @@ class ICQA_AutoReportApp(ctk.CTk):
                 barcode_col: 'count', 
                 'DESCRIPTION': 'first' 
             }
-            if has_external_id:
+            if self.has_external_id:
                 agg_dict['EXTERNALID'] = 'first'
 
             grouped = df_raw.groupby(['RESOLVETYPE', barcode_col, 'REPORT_DATE']).agg(agg_dict).rename(columns={barcode_col: 'COUNT'}).reset_index()
@@ -261,6 +263,7 @@ class ICQA_AutoReportApp(ctk.CTk):
 
             self.final_report_data = []
             self.barcode_candidates = {} 
+            self.barcode_col_name = barcode_col # 나중을 위해 저장
             
             resolve_types = grouped['RESOLVETYPE'].unique()
             
@@ -283,20 +286,7 @@ class ICQA_AutoReportApp(ctk.CTk):
                 )
                 
                 for index, row in merged.iterrows():
-                    ext_id = row['EXTERNALID'] if has_external_id else row[barcode_col]
-                    
-                    self.final_report_data.append({
-                        'RESOLVETYPE': r_type,
-                        'RANK': index + 1,
-                        'EXTERNAL_ID': self.clean_text(ext_id), 
-                        'BARCODE': self.clean_text(row[barcode_col]),
-                        'SKU_NAME': self.clean_text(row['DESCRIPTION']),
-                        'QTY': self.clean_text(row['PROBLEM_QTY']),
-                        'COUNT': self.clean_text(row['COUNT']),
-                        'PROB_TYPE': self.clean_text(row['문제유형']),
-                        'DIVE_DEEP': self.clean_text(row['사유']),
-                        'DEFECT_TYPE': 'Found' 
-                    })
+                    self.final_report_data.append(row) # 원본 데이터(row)를 통째로 보관
             
             self.update_barcode_text()
             self.open_defect_selector()
@@ -335,14 +325,19 @@ class ICQA_AutoReportApp(ctk.CTk):
 
         self.entries_data = [] 
         
-        for i, item in enumerate(self.final_report_data):
+        for i, row in enumerate(self.final_report_data):
             row_frame = ctk.CTkFrame(scroll_frame)
             row_frame.pack(fill="x", pady=5, padx=5)
             
             top_frame = ctk.CTkFrame(row_frame, fg_color="transparent")
             top_frame.pack(fill="x", padx=10, pady=(10, 2))
             
-            info_text = f"[{item['RESOLVETYPE']}] 바코드: {item['BARCODE']} | 문제수량: {item['QTY']}"
+            b_code = self.clean_text(row[self.barcode_col_name])
+            qty = self.clean_text(row['PROBLEM_QTY'])
+            r_type = self.clean_text(row['RESOLVETYPE'])
+            dive_val = self.clean_text(row['사유'])
+            
+            info_text = f"[{r_type}] 바코드: {b_code} | 문제수량: {qty}"
             ctk.CTkLabel(top_frame, text=info_text, font=("Arial", 14, "bold")).pack(side="left")
             
             combo = ctk.CTkComboBox(top_frame, values=["Found", "Loss", "DAMAGED_SKU"], width=130)
@@ -356,19 +351,25 @@ class ICQA_AutoReportApp(ctk.CTk):
             entry = ctk.CTkEntry(bot_frame, font=("Arial", 13))
             entry.pack(side="left", fill="x", expand=True, padx=(10, 0))
             
-            dive_text = item['DIVE_DEEP'] if item['DIVE_DEEP'] else "사유 미기재"
+            dive_text = dive_val if dive_val else "사유 미기재"
             entry.insert(0, dive_text)
             
-            self.entries_data.append((item, combo, entry))
+            self.entries_data.append((row, combo, entry, r_type)) # 튜플로 저장
 
         btn_finish = ctk.CTkButton(self.sel_win, text="✨ 입력 완료 및 표 이미지 생성 ✨", height=50, command=self.generate_final_tables)
         btn_finish.pack(pady=15)
 
     def generate_final_tables(self):
-        for item, combo, entry in self.entries_data:
-            item['DEFECT_TYPE'] = combo.get()
-            item['DIVE_DEEP'] = entry.get() 
-        
+        # 입력된 사유 업데이트
+        final_list = []
+        for index, (row, combo, entry, r_type) in enumerate(self.entries_data):
+            # 판다스 Series를 딕셔너리로 변환하여 자유롭게 조작합니다.
+            row_dict = row.to_dict()
+            row_dict['DEFECT_TYPE'] = combo.get()
+            row_dict['FINAL_DIVE_DEEP'] = entry.get()
+            row_dict['RANK'] = index + 1
+            final_list.append(row_dict)
+            
         self.sel_win.destroy() 
         
         try:
@@ -378,39 +379,60 @@ class ICQA_AutoReportApp(ctk.CTk):
         except:
             font_title = font_header = font_row = ImageFont.load_default()
 
+        # 💡 [핵심 수정] Problem Type 과 Solve Type 열의 너비를 늘렸습니다! (120px -> 140px/160px)
         cols = [
-            ("NO", 50), ("External ID", 110), ("SKU Name", 300), 
-            ("Problem QTY", 120), ("Problem 건수", 120), 
-            ("Problem Type", 120), ("Solve Type", 120), 
+            ("NO", 50), ("External ID", 110), ("SKU Name", 280), 
+            ("Problem QTY", 100), ("Problem 건수", 100), 
+            ("Problem Type", 140), ("Solve Type", 160), 
             ("Defect Type", 100), ("Dive-Deep", 400)
         ]
         table_width = sum([w for _, w in cols])
         header_height = 40 
 
-        df_final = pd.DataFrame(self.final_report_data)
+        df_final = pd.DataFrame(final_list)
         for r_type in df_final['RESOLVETYPE'].unique():
             type_data = df_final[df_final['RESOLVETYPE'] == r_type]
             
             raw_title = f"[{r_type}] Problem Analysis"
-            
             safe_width = table_width - 40 
             title_wrap = self.force_pixel_wrap(raw_title, font_title, safe_width)
             title_lines = title_wrap.count('\n') + 1
-            
             title_height = (title_lines * 40) + 30 
 
             row_heights = []
             wrapped_rows = []
             
-            for _, row in type_data.iterrows():
-                sku_wrap = self.force_pixel_wrap(str(row['SKU_NAME']), font_row, cols[2][1] - 30) 
-                dive_wrap = self.force_pixel_wrap(str(row['DIVE_DEEP']), font_row, cols[8][1] - 30)
+            # 모든 데이터를 순회하며 래핑을 준비합니다.
+            for i, row in type_data.iterrows():
+                ext_id = row['EXTERNALID'] if self.has_external_id else row[self.barcode_col_name]
                 
-                max_lines = max(sku_wrap.count('\n'), dive_wrap.count('\n')) + 1
-                calc_height = max(60, (max_lines * 20) + 20) 
+                raw_vals = [
+                    str(row['RANK']), 
+                    self.clean_text(ext_id), 
+                    self.clean_text(row['DESCRIPTION']),
+                    self.clean_text(row['PROBLEM_QTY']),
+                    self.clean_text(row['COUNT']),
+                    self.clean_text(row['문제유형']),
+                    self.clean_text(row['RESOLVETYPE']),
+                    self.clean_text(row['DEFECT_TYPE']),
+                    self.clean_text(row['FINAL_DIVE_DEEP'])
+                ]
                 
+                wrapped_vals = []
+                max_lines = 1
+                
+                # 💡 [핵심 수정] 이제 2개 열이 아니라 '모든 9개 열'에 대해서 강제 줄바꿈(force_pixel_wrap)을 먹입니다!
+                for j, val in enumerate(raw_vals):
+                    col_w = cols[j][1]
+                    # 여백 20px을 빼고 픽셀 단위로 안전하게 자릅니다.
+                    wrap_text = self.force_pixel_wrap(val, font_row, col_w - 20)
+                    wrapped_vals.append(wrap_text)
+                    # 줄바꿈이 가장 많이 발생한 열을 기준으로 그 줄의 전체 높이를 결정합니다.
+                    max_lines = max(max_lines, wrap_text.count('\n') + 1)
+                
+                calc_height = max(50, (max_lines * 20) + 20) 
                 row_heights.append(calc_height)
-                wrapped_rows.append((row, sku_wrap, dive_wrap))
+                wrapped_rows.append(wrapped_vals)
                 
             total_height = title_height + header_height + sum(row_heights) + 20
             
@@ -422,6 +444,7 @@ class ICQA_AutoReportApp(ctk.CTk):
             draw.rectangle([0, 0, table_width-1, total_height-1], outline=color_border, width=2)
             draw.text((15, 20), title_wrap, font=font_title, fill='black', spacing=10)
 
+            # 헤더(제목 표시줄) 그리기
             y_off = title_height
             draw.rectangle([0, y_off, table_width, y_off + header_height], fill=color_navy, outline=color_border)
             
@@ -439,24 +462,18 @@ class ICQA_AutoReportApp(ctk.CTk):
                     
                 center_x = x_off + (w - text_w) / 2
                 center_y = y_off + (header_height - text_h) / 2 - 2
-                
                 draw.text((center_x, center_y), name, font=font_header, fill=color_white)
                 x_off += w
 
             y_off += header_height
             
-            for i, (row_data, sku_wrap, dive_wrap) in enumerate(wrapped_rows):
+            # 본문 데이터 표 그리기
+            for i, wrapped_vals in enumerate(wrapped_rows):
                 bg_color = color_white if i % 2 == 0 else color_iceblue
                 current_rh = row_heights[i]
                 
-                row_vals = [
-                    str(row_data['RANK']), str(row_data['EXTERNAL_ID']), sku_wrap, str(row_data['QTY']),
-                    str(row_data['COUNT']), str(row_data['PROB_TYPE']), str(row_data['RESOLVETYPE']), 
-                    str(row_data['DEFECT_TYPE']), dive_wrap
-                ]
-                
                 x_off = 0
-                for j, (val, w) in enumerate(zip(row_vals, [cw for _, cw in cols])):
+                for j, (val, w) in enumerate(zip(wrapped_vals, [cw for _, cw in cols])):
                     draw.rectangle([x_off, y_off, x_off+w, y_off + current_rh], fill=bg_color, outline=color_border)
                     
                     try:
@@ -467,13 +484,16 @@ class ICQA_AutoReportApp(ctk.CTk):
                         text_w = len(val) * 7
                         text_h = 16
 
+                    # 어떤 열이든 세로축은 무조건 한가운데로 정렬!
                     center_y = y_off + (current_rh - text_h) / 2 - 2
 
                     if j == 2 or j == 8:
-                        draw.text((x_off + 15, center_y), val, font=font_row, fill='black', spacing=6) 
+                        # 글자가 긴 SKU Name과 Dive-Deep은 보기 좋게 가로 왼쪽 정렬
+                        draw.text((x_off + 10, center_y), val, font=font_row, fill='black', spacing=6, align='left') 
                     else:
+                        # 나머지 짧은 텍스트들은 가로, 세로 완벽하게 정중앙 십자 맞춤
                         center_x = x_off + (w - text_w) / 2
-                        draw.text((center_x, center_y), val, font=font_row, fill='black', spacing=6) 
+                        draw.text((center_x, center_y), val, font=font_row, fill='black', spacing=6, align='center') 
 
                     x_off += w
                 
