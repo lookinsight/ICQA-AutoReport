@@ -10,6 +10,7 @@ import json
 import textwrap
 from datetime import datetime
 import random
+import re # 💡 정규표현식 모듈 추가 (줄바꿈 스마트 처리용)
 
 # 윈도우 디스플레이 배율 무시
 try:
@@ -127,35 +128,64 @@ class ICQA_AutoReportApp(ctk.CTk):
             b = b[:-2]  
         return b
 
-    # 💡 [핵심 수정] 기존 엑셀에 있던 쓸데없는 엔터를 싹 무시하고 일렬로 쭉 펴서 새로 자릅니다!
+    # 💡 [핵심 함수 1] 텍스트 폭을 정확하게 계산하는 도우미
+    def get_text_width(self, font, text):
+        try:
+            return font.getlength(text)
+        except:
+            try:
+                return font.getsize(text)[0]
+            except:
+                bbox = font.getbbox(text)
+                return bbox[2] if bbox else len(text)*7
+
+    # 💡 [핵심 함수 2] 단어 단위, 언더바(_), 엔터(\n)를 완벽하게 지키는 스마트 래핑 로직!
     def force_pixel_wrap(self, text, font, max_width):
         if not text: return ""
-        # 1. 엑셀의 강제 줄바꿈(\n, \r)을 스페이스바로 다 바꿔버립니다.
-        text = str(text).replace('\n', ' ').replace('\r', '').strip()
-        # 2. 스페이스바가 여러 개 연속으로 있으면 한 개로 예쁘게 줄여줍니다.
-        text = " ".join(text.split())
         
-        lines = []
-        current_line = ""
-        for char in text:
-            test_line = current_line + char
-            try:
-                w = font.getlength(test_line)
-            except:
-                try:
-                    w = font.getsize(test_line)[0]
-                except:
-                    bbox = font.getbbox(test_line)
-                    w = bbox[2] if bbox else 0
+        # 원본 데이터의 의도된 줄바꿈(\n)은 살리되, 연속된 빈 줄(\n\n\n)만 1개로 압축!
+        text = str(text).replace('\r', '')
+        text = re.sub(r'\n\s*\n+', '\n', text).strip()
+        
+        final_lines = []
+        for paragraph in text.split('\n'):
+            words = paragraph.split(' ') # 띄어쓰기 단위로 단어 추출
+            current_line = ""
             
-            if w > max_width:
-                lines.append(current_line)
-                current_line = char
-            else:
-                current_line = test_line
-        if current_line:
-            lines.append(current_line)
-        return "\n".join(lines)
+            for word in words:
+                # 1. 단어 안에 '_'가 있고 칸보다 길면, '_' 단위로 먼저 쪼개봅니다. (영어/코드용)
+                if '_' in word and self.get_text_width(font, word) > max_width:
+                    parts = word.split('_')
+                    sub_words = [p + '_' for p in parts[:-1]] + [parts[-1]]
+                else:
+                    sub_words = [word]
+                    
+                for sub in sub_words:
+                    # 현재 줄과 합쳤을 때 길이를 테스트
+                    spacer = " " if current_line and not current_line.endswith('_') else ""
+                    test_line = current_line + spacer + sub
+                    
+                    if self.get_text_width(font, test_line) <= max_width:
+                        current_line = test_line
+                    else:
+                        if current_line:
+                            final_lines.append(current_line)
+                            current_line = sub
+                        else:
+                            # 2. 띄어쓰기나 '_' 조차도 없는 쌩 단어가 엄청나게 길면 부득이하게 글자로 자름
+                            char_line = ""
+                            for char in sub:
+                                if self.get_text_width(font, char_line + char) <= max_width:
+                                    char_line += char
+                                else:
+                                    final_lines.append(char_line)
+                                    char_line = char
+                            current_line = char_line
+            
+            if current_line:
+                final_lines.append(current_line)
+                
+        return "\n".join(final_lines)
 
     def load_raw_data(self):
         filepath = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
@@ -263,7 +293,7 @@ class ICQA_AutoReportApp(ctk.CTk):
 
             self.final_report_data = []
             self.barcode_candidates = {} 
-            self.barcode_col_name = barcode_col # 나중을 위해 저장
+            self.barcode_col_name = barcode_col 
             
             resolve_types = grouped['RESOLVETYPE'].unique()
             
@@ -286,7 +316,7 @@ class ICQA_AutoReportApp(ctk.CTk):
                 )
                 
                 for index, row in merged.iterrows():
-                    self.final_report_data.append(row) # 원본 데이터(row)를 통째로 보관
+                    self.final_report_data.append(row) 
             
             self.update_barcode_text()
             self.open_defect_selector()
@@ -354,16 +384,14 @@ class ICQA_AutoReportApp(ctk.CTk):
             dive_text = dive_val if dive_val else "사유 미기재"
             entry.insert(0, dive_text)
             
-            self.entries_data.append((row, combo, entry, r_type)) # 튜플로 저장
+            self.entries_data.append((row, combo, entry, r_type))
 
         btn_finish = ctk.CTkButton(self.sel_win, text="✨ 입력 완료 및 표 이미지 생성 ✨", height=50, command=self.generate_final_tables)
         btn_finish.pack(pady=15)
 
     def generate_final_tables(self):
-        # 입력된 사유 업데이트
         final_list = []
         for index, (row, combo, entry, r_type) in enumerate(self.entries_data):
-            # 판다스 Series를 딕셔너리로 변환하여 자유롭게 조작합니다.
             row_dict = row.to_dict()
             row_dict['DEFECT_TYPE'] = combo.get()
             row_dict['FINAL_DIVE_DEEP'] = entry.get()
@@ -379,11 +407,11 @@ class ICQA_AutoReportApp(ctk.CTk):
         except:
             font_title = font_header = font_row = ImageFont.load_default()
 
-        # 💡 [핵심 수정] Problem Type 과 Solve Type 열의 너비를 늘렸습니다! (120px -> 140px/160px)
+        # 💡 [핵심 수정 3] Problem Type과 Solve Type 열의 넓이를 시원하게 키웠습니다! (150px, 180px)
         cols = [
-            ("NO", 50), ("External ID", 110), ("SKU Name", 280), 
+            ("NO", 40), ("External ID", 110), ("SKU Name", 280), 
             ("Problem QTY", 100), ("Problem 건수", 100), 
-            ("Problem Type", 140), ("Solve Type", 160), 
+            ("Problem Type", 150), ("Solve Type", 180), 
             ("Defect Type", 100), ("Dive-Deep", 400)
         ]
         table_width = sum([w for _, w in cols])
@@ -402,7 +430,6 @@ class ICQA_AutoReportApp(ctk.CTk):
             row_heights = []
             wrapped_rows = []
             
-            # 모든 데이터를 순회하며 래핑을 준비합니다.
             for i, row in type_data.iterrows():
                 ext_id = row['EXTERNALID'] if self.has_external_id else row[self.barcode_col_name]
                 
@@ -421,13 +448,10 @@ class ICQA_AutoReportApp(ctk.CTk):
                 wrapped_vals = []
                 max_lines = 1
                 
-                # 💡 [핵심 수정] 이제 2개 열이 아니라 '모든 9개 열'에 대해서 강제 줄바꿈(force_pixel_wrap)을 먹입니다!
                 for j, val in enumerate(raw_vals):
                     col_w = cols[j][1]
-                    # 여백 20px을 빼고 픽셀 단위로 안전하게 자릅니다.
-                    wrap_text = self.force_pixel_wrap(val, font_row, col_w - 20)
+                    wrap_text = self.force_pixel_wrap(val, font_row, col_w - 20) # 20px 양옆 여유 확보
                     wrapped_vals.append(wrap_text)
-                    # 줄바꿈이 가장 많이 발생한 열을 기준으로 그 줄의 전체 높이를 결정합니다.
                     max_lines = max(max_lines, wrap_text.count('\n') + 1)
                 
                 calc_height = max(50, (max_lines * 20) + 20) 
@@ -444,7 +468,6 @@ class ICQA_AutoReportApp(ctk.CTk):
             draw.rectangle([0, 0, table_width-1, total_height-1], outline=color_border, width=2)
             draw.text((15, 20), title_wrap, font=font_title, fill='black', spacing=10)
 
-            # 헤더(제목 표시줄) 그리기
             y_off = title_height
             draw.rectangle([0, y_off, table_width, y_off + header_height], fill=color_navy, outline=color_border)
             
@@ -453,9 +476,8 @@ class ICQA_AutoReportApp(ctk.CTk):
                 draw.rectangle([x_off, y_off, x_off+w, y_off + header_height], outline=color_border)
                 
                 try:
-                    text_bbox = font_header.getbbox(name)
-                    text_w = text_bbox[2] - text_bbox[0]
-                    text_h = text_bbox[3] - text_bbox[1]
+                    text_w = self.get_text_width(font_header, name)
+                    text_h = 14
                 except:
                     text_w = len(name) * 8 
                     text_h = 14
@@ -467,7 +489,6 @@ class ICQA_AutoReportApp(ctk.CTk):
 
             y_off += header_height
             
-            # 본문 데이터 표 그리기
             for i, wrapped_vals in enumerate(wrapped_rows):
                 bg_color = color_white if i % 2 == 0 else color_iceblue
                 current_rh = row_heights[i]
@@ -478,20 +499,17 @@ class ICQA_AutoReportApp(ctk.CTk):
                     
                     try:
                         lines = val.split('\n')
-                        text_w = max([font_row.getlength(line) for line in lines]) if hasattr(font_row, 'getlength') else max([len(line)*7 for line in lines])
+                        text_w = max([self.get_text_width(font_row, line) for line in lines])
                         text_h = len(lines) * 16 
                     except:
                         text_w = len(val) * 7
                         text_h = 16
 
-                    # 어떤 열이든 세로축은 무조건 한가운데로 정렬!
                     center_y = y_off + (current_rh - text_h) / 2 - 2
 
                     if j == 2 or j == 8:
-                        # 글자가 긴 SKU Name과 Dive-Deep은 보기 좋게 가로 왼쪽 정렬
                         draw.text((x_off + 10, center_y), val, font=font_row, fill='black', spacing=6, align='left') 
                     else:
-                        # 나머지 짧은 텍스트들은 가로, 세로 완벽하게 정중앙 십자 맞춤
                         center_x = x_off + (w - text_w) / 2
                         draw.text((center_x, center_y), val, font=font_row, fill='black', spacing=6, align='center') 
 
