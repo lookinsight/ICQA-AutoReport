@@ -26,7 +26,7 @@ class ICQA_AutoReportApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("AutoReport_test")
-        self.center_window(self, 550, 900) 
+        self.center_window(self, 550, 850) # UI가 줄었으니 창 높이도 살짝 줄여줌
         
         self.raw_filepath = None
         self.dive_filepath = None
@@ -57,14 +57,6 @@ class ICQA_AutoReportApp(ctk.CTk):
         self.date_combo = ctk.CTkComboBox(frame_date, values=["Raw Data를 먼저 넣어주세요"], width=180)
         self.date_combo.pack(side="left")
 
-        # 상품명 제외 기능
-        frame_delete = ctk.CTkFrame(frame_excel, fg_color="transparent")
-        frame_delete.pack(pady=(5, 5), padx=20, fill="x")
-        ctk.CTkLabel(frame_delete, text="🗑️ 제외 상품명:", font=("Arial", 14, "bold"), text_color="#FF6B6B").pack(side="left", padx=(0, 10))
-        self.entry_sku_delete = ctk.CTkEntry(frame_delete, placeholder_text="표에서 지울 SKU Name (선택)", width=230)
-        self.entry_sku_delete.pack(side="left")
-
-        # 보고 범위 선택 UI (Top 5 vs 전체)
         self.report_range = ctk.StringVar(value="top5")
         frame_range_opt = ctk.CTkFrame(frame_excel, fg_color="transparent")
         frame_range_opt.pack(padx=20, pady=(5, 0), fill="x")
@@ -72,7 +64,6 @@ class ICQA_AutoReportApp(ctk.CTk):
         ctk.CTkRadioButton(frame_range_opt, text="Top 5 (기본)", variable=self.report_range, value="top5").pack(side="left", padx=(10, 5))
         ctk.CTkRadioButton(frame_range_opt, text="전체 데이터", variable=self.report_range, value="all").pack(side="left", padx=5)
 
-        # 바코드 추출 방식
         self.barcode_mode = ctk.StringVar(value="top1")
         frame_barcode_opt = ctk.CTkFrame(frame_excel, fg_color="transparent")
         frame_barcode_opt.pack(padx=20, pady=(5, 0), fill="x")
@@ -208,33 +199,37 @@ class ICQA_AutoReportApp(ctk.CTk):
                 return
                 
             req_raw = ['RESOLVETYPE', barcode_col, 'PROBLEM_QTY', 'MOVED_QTY', 'DESCRIPTION', 'REPORT_DATE']
+            has_external_id = 'EXTERNALID' in df_raw.columns
+            if has_external_id and 'EXTERNALID' not in req_raw:
+                req_raw.append('EXTERNALID')
+                
             for col in req_raw:
                 if col not in df_raw.columns:
                     messagebox.showerror("오류", f"Raw Data에 '{col}' 열이 없습니다!")
                     return
 
             df_raw[barcode_col] = df_raw[barcode_col].apply(self.clean_barcode)
+            if has_external_id:
+                df_raw['EXTERNALID'] = df_raw['EXTERNALID'].astype(str)
+                
             df_raw['REPORT_DATE'] = pd.to_datetime(df_raw['REPORT_DATE'], errors='coerce').dt.strftime('%Y-%m-%d')
             df_raw = df_raw[df_raw['REPORT_DATE'] == target_date]
-
-            sku_to_delete = self.entry_sku_delete.get().strip()
-            if sku_to_delete:
-                df_raw = df_raw[df_raw['DESCRIPTION'] != sku_to_delete]
             
             if df_raw.empty:
                 messagebox.showinfo("알림", f"Raw Data 파일에 {target_date} 날짜의 데이터가 없습니다.")
                 return
 
-            grouped = df_raw.groupby(['RESOLVETYPE', barcode_col, 'REPORT_DATE']).agg({
+            agg_dict = {
                 'PROBLEM_QTY': 'sum',
                 'MOVED_QTY': 'sum',
                 barcode_col: 'count', 
                 'DESCRIPTION': 'first' 
-            }).rename(columns={barcode_col: 'COUNT'}).reset_index()
+            }
+            if has_external_id:
+                agg_dict['EXTERNALID'] = 'first'
 
-            # ==========================================
-            # 💡 Dive-Deep 파일 읽어오기 (완벽 방어 버전)
-            # ==========================================
+            grouped = df_raw.groupby(['RESOLVETYPE', barcode_col, 'REPORT_DATE']).agg(agg_dict).rename(columns={barcode_col: 'COUNT'}).reset_index()
+
             with open(self.dive_filepath, 'rb') as f:
                 xls = pd.ExcelFile(f, engine='openpyxl')
                 valid_dfs = []
@@ -244,26 +239,21 @@ class ICQA_AutoReportApp(ctk.CTk):
                 
                 for sheet_name in xls.sheet_names:
                     temp_df = pd.read_excel(xls, sheet_name=sheet_name)
-                    
-                    # 공백 압착 및 컬럼명 정리
                     clean_cols = temp_df.columns.astype(str).str.strip().str.replace('\n', '').str.replace(' ', '')
                     temp_df.columns = clean_cols 
                     
                     if all(col in clean_cols for col in req_dive):
                         valid_dfs.append(temp_df)
-                        print(f"✅ 유효한 양식의 시트 발견 및 합치기 대기: [{sheet_name}]")
                 
                 if not valid_dfs:
-                    messagebox.showerror("오류", f"어떤 시트에서도 필수 열({req_dive})을 모두 찾을 수 없습니다!\n엑셀 양식을 다시 확인해주세요.")
+                    messagebox.showerror("오류", f"어떤 시트에서도 필수 열({req_dive})을 모두 찾을 수 없습니다!")
                     return
                 
-                # 유효한 시트 모두 합치기
                 df_dive = pd.concat(valid_dfs, ignore_index=True)
 
             df_dive['상품바코드'] = df_dive['상품바코드'].apply(self.clean_barcode)
             df_dive[dive_date_col] = pd.to_datetime(df_dive[dive_date_col], errors='coerce').dt.strftime('%Y-%m-%d')
             df_dive = df_dive[df_dive[dive_date_col] == target_date]
-            # ==========================================
 
             self.final_report_data = []
             self.barcode_candidates = {} 
@@ -289,9 +279,12 @@ class ICQA_AutoReportApp(ctk.CTk):
                 )
                 
                 for index, row in merged.iterrows():
+                    ext_id = row['EXTERNALID'] if has_external_id else row[barcode_col]
+                    
                     self.final_report_data.append({
                         'RESOLVETYPE': r_type,
                         'RANK': index + 1,
+                        'EXTERNAL_ID': self.clean_text(ext_id), 
                         'BARCODE': self.clean_text(row[barcode_col]),
                         'SKU_NAME': self.clean_text(row['DESCRIPTION']),
                         'QTY': self.clean_text(row['PROBLEM_QTY']),
@@ -381,7 +374,6 @@ class ICQA_AutoReportApp(ctk.CTk):
         except:
             font_title = font_header = font_row = ImageFont.load_default()
 
-        # 💡 Problem QTY, 건수 폭을 넓히고 여백을 확보한 최적화된 열 너비
         cols = [
             ("NO", 50), ("External ID", 110), ("SKU Name", 300), 
             ("Problem QTY", 120), ("Problem 건수", 120), 
@@ -407,8 +399,8 @@ class ICQA_AutoReportApp(ctk.CTk):
             wrapped_rows = []
             
             for _, row in type_data.iterrows():
-                sku_wrap = textwrap.fill(str(row['SKU_NAME']), width=20)
-                dive_wrap = textwrap.fill(str(row['DIVE_DEEP']), width=26)
+                sku_wrap = self.force_pixel_wrap(str(row['SKU_NAME']), font_row, cols[2][1] - 30) 
+                dive_wrap = self.force_pixel_wrap(str(row['DIVE_DEEP']), font_row, cols[8][1] - 30)
                 
                 max_lines = max(sku_wrap.count('\n'), dive_wrap.count('\n')) + 1
                 calc_height = max(60, (max_lines * 20) + 20) 
@@ -433,7 +425,6 @@ class ICQA_AutoReportApp(ctk.CTk):
             for name, w in cols:
                 draw.rectangle([x_off, y_off, x_off+w, y_off + header_height], outline=color_border)
                 
-                # 💡 텍스트가 정확히 박스의 정중앙에 위치하도록 측정 및 오프셋 계산
                 try:
                     text_bbox = font_header.getbbox(name)
                     text_w = text_bbox[2] - text_bbox[0]
@@ -455,7 +446,7 @@ class ICQA_AutoReportApp(ctk.CTk):
                 current_rh = row_heights[i]
                 
                 row_vals = [
-                    str(row_data['RANK']), str(row_data['BARCODE']), sku_wrap, str(row_data['QTY']),
+                    str(row_data['RANK']), str(row_data['EXTERNAL_ID']), sku_wrap, str(row_data['QTY']),
                     str(row_data['COUNT']), str(row_data['PROB_TYPE']), str(row_data['RESOLVETYPE']), 
                     str(row_data['DEFECT_TYPE']), dive_wrap
                 ]
@@ -463,7 +454,23 @@ class ICQA_AutoReportApp(ctk.CTk):
                 x_off = 0
                 for j, (val, w) in enumerate(zip(row_vals, [cw for _, cw in cols])):
                     draw.rectangle([x_off, y_off, x_off+w, y_off + current_rh], fill=bg_color, outline=color_border)
-                    draw.text((x_off + 10, y_off + 10), val, font=font_row, fill='black', spacing=4) 
+                    
+                    try:
+                        lines = val.split('\n')
+                        text_w = max([font_row.getlength(line) for line in lines]) if hasattr(font_row, 'getlength') else max([len(line)*7 for line in lines])
+                        text_h = len(lines) * 16 
+                    except:
+                        text_w = len(val) * 7
+                        text_h = 16
+
+                    center_y = y_off + (current_rh - text_h) / 2 - 2
+
+                    if j == 2 or j == 8:
+                        draw.text((x_off + 15, center_y), val, font=font_row, fill='black', spacing=6) 
+                    else:
+                        center_x = x_off + (w - text_w) / 2
+                        draw.text((center_x, center_y), val, font=font_row, fill='black', spacing=6) 
+
                     x_off += w
                 
                 y_off += current_rh
@@ -492,8 +499,20 @@ class ICQA_AutoReportApp(ctk.CTk):
         self.withdraw() 
         self.snip_window = tk.Toplevel(self)
         self.snip_window.attributes('-alpha', 0.3)
-        self.snip_window.attributes('-fullscreen', True)
+        self.snip_window.overrideredirect(True) 
         self.snip_window.config(cursor="cross")
+
+        try:
+            user32 = ctypes.windll.user32
+            v_x = user32.GetSystemMetrics(76) 
+            v_y = user32.GetSystemMetrics(77) 
+            v_w = user32.GetSystemMetrics(78) 
+            v_h = user32.GetSystemMetrics(79) 
+            
+            self.snip_window.geometry(f"{v_w}x{v_h}+{v_x}+{v_y}")
+        except:
+            self.snip_window.attributes('-fullscreen', True)
+
         self.snip_window.bind("<ButtonPress-1>", self.on_press)
         self.snip_window.bind("<B1-Motion>", self.on_drag)
         self.snip_window.bind("<ButtonRelease-1>", lambda event: self.on_release(event, num))
