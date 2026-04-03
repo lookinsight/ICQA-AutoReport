@@ -26,7 +26,7 @@ class ICQA_AutoReportApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("AutoReport_test")
-        self.center_window(self, 550, 850) # UI가 줄었으니 창 높이도 살짝 줄여줌
+        self.center_window(self, 550, 800) # 제외 상품명 UI가 빠졌으니 창 높이를 800으로 줄임
         
         self.raw_filepath = None
         self.dive_filepath = None
@@ -57,9 +57,11 @@ class ICQA_AutoReportApp(ctk.CTk):
         self.date_combo = ctk.CTkComboBox(frame_date, values=["Raw Data를 먼저 넣어주세요"], width=180)
         self.date_combo.pack(side="left")
 
+        # 💡 [삭제 완료] 제외 상품명 UI가 있던 자리를 깔끔하게 비웠습니다!
+
         self.report_range = ctk.StringVar(value="top5")
         frame_range_opt = ctk.CTkFrame(frame_excel, fg_color="transparent")
-        frame_range_opt.pack(padx=20, pady=(5, 0), fill="x")
+        frame_range_opt.pack(padx=20, pady=(15, 0), fill="x")
         ctk.CTkLabel(frame_range_opt, text="📋 보고 표 범위:", font=("Arial", 12, "bold"), text_color="#00FFCC").pack(side="left")
         ctk.CTkRadioButton(frame_range_opt, text="Top 5 (기본)", variable=self.report_range, value="top5").pack(side="left", padx=(10, 5))
         ctk.CTkRadioButton(frame_range_opt, text="전체 데이터", variable=self.report_range, value="all").pack(side="left", padx=5)
@@ -214,6 +216,8 @@ class ICQA_AutoReportApp(ctk.CTk):
                 
             df_raw['REPORT_DATE'] = pd.to_datetime(df_raw['REPORT_DATE'], errors='coerce').dt.strftime('%Y-%m-%d')
             df_raw = df_raw[df_raw['REPORT_DATE'] == target_date]
+            
+            # 💡 [삭제 완료] 제외 상품명 로직이 완벽하게 삭제되었습니다!
             
             if df_raw.empty:
                 messagebox.showinfo("알림", f"Raw Data 파일에 {target_date} 날짜의 데이터가 없습니다.")
