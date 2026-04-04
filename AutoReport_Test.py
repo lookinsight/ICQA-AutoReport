@@ -807,9 +807,13 @@ class ImageEditorWindow(ctk.CTkToplevel):
     def __init__(self, parent_win, img_path, record_dict, slot_num, lbl_path):
         super().__init__(parent_win)
         self.title("ICQA 현장 사진 강조 편집기")
+        
+        # 💡 [좀비 창 완벽 방어] X 버튼 강제 종료 로직 연결
+        self.protocol("WM_DELETE_WINDOW", self.close_window)
+        
         self.img_path = img_path
         self.current_pen_color = "#FF0000"
-        self.current_line_width = 4  # 💡 기본 굵기를 4로 설정
+        self.current_line_width = 4  
         self.coords = []
         
         self.record_dict = record_dict
@@ -820,7 +824,7 @@ class ImageEditorWindow(ctk.CTkToplevel):
             self.original_pil_img = Image.open(img_path).convert('RGB')
         except Exception: 
             messagebox.showerror("이미지 로드 실패", f"{img_path} 로드 실패")
-            self.destroy()
+            self.close_window() # 에러 나도 안전하게 닫기
             return
         
         max_w, max_h = 1000, 700
@@ -850,7 +854,6 @@ class ImageEditorWindow(ctk.CTkToplevel):
         palette_frame = ctk.CTkFrame(main_frame, width=140)
         palette_frame.pack(side="right", fill="y", padx=5)
         
-        # 🎨 색상 선택 영역
         ctk.CTkLabel(palette_frame, text="🎨 강조 색상", font=("Arial", 13, "bold")).pack(pady=(10, 5))
         colors = [("#FF0000", "빨강"), ("#0000FF", "파랑"), ("#FFFF00", "노랑"), ("#00FF00", "초록")]
         self.color_btns = {}
@@ -860,22 +863,25 @@ class ImageEditorWindow(ctk.CTkToplevel):
             self.color_btns[code] = btn
         self.color_btns[self.current_pen_color].configure(border_width=3, border_color="white")
 
-        # 📏 선 굵기 조절 영역 (추가된 기능!)
         ctk.CTkLabel(palette_frame, text="━━━━━━━━━━", text_color="gray").pack(pady=5)
         ctk.CTkLabel(palette_frame, text="📏 선 굵기", font=("Arial", 13, "bold")).pack(pady=(5, 5))
         
         self.width_label = ctk.CTkLabel(palette_frame, text=f"현재 굵기: {self.current_line_width}", font=("Arial", 12))
-        self.width_label.pack(pady=0)
+        self.width_label.pack(pady=(0, 5))
         
-        self.width_slider = ctk.CTkSlider(palette_frame, from_=2, to_=15, width=120, command=self.change_pen_width)
-        self.width_slider.set(self.current_line_width)
-        self.width_slider.pack(pady=(5, 15))
+        # 💡 [버그 수정 2] 오류 많던 슬라이더를 확실한 버튼식으로 교체
+        width_btn_frame = ctk.CTkFrame(palette_frame, fg_color="transparent")
+        width_btn_frame.pack(pady=5)
+        
+        ctk.CTkButton(width_btn_frame, text="➖", width=40, font=("Arial", 14, "bold"), command=self.decrease_width).pack(side="left", padx=2)
+        ctk.CTkButton(width_btn_frame, text="➕", width=40, font=("Arial", 14, "bold"), command=self.increase_width).pack(side="left", padx=2)
         
         bot_frame = ctk.CTkFrame(self, fg_color="transparent")
         bot_frame.pack(side="bottom", fill="x", pady=15, padx=20)
         
         ctk.CTkButton(bot_frame, text="🖍️ 화면 초기화", width=120, fg_color="darkred", hover_color="maroon", command=self.clear_canvas).pack(side="left")
-        ctk.CTkButton(bot_frame, text="❌ 취소 및 닫기", width=120, fg_color="#454545", command=self.destroy).pack(side="right", padx=5)
+        
+        ctk.CTkButton(bot_frame, text="❌ 취소 및 닫기", width=120, fg_color="#454545", command=self.close_window).pack(side="right", padx=5)
         ctk.CTkButton(bot_frame, text="✨ 편집 완료 및 사진 적용 ✨", width=200, height=40, font=("Arial", 14, "bold"), fg_color="green", command=self.save_edits).pack(side="right", padx=15)
 
     def center_window(self, width, height): 
@@ -885,14 +891,29 @@ class ImageEditorWindow(ctk.CTkToplevel):
         y = int((screen_height / 2) - (height / 2))
         self.geometry(f"{width}x{height}+{x}+{y}")
 
+    # 💡 [좀비 창 완벽 퇴치 로직]
+    def close_window(self):
+        try:
+            self.grab_release() # 다른 창 못 누르게 꽉 잡고 있던 권한 해제
+        except Exception:
+            pass
+        self.withdraw() # 화면에서 먼저 즉시 숨김 처리!
+        self.after(10, self.destroy) # 0.01초 뒤에 메모리에서 안전하게 파괴
+
     def change_pen_color(self, color_code): 
         self.color_btns[self.current_pen_color].configure(border_width=0)
         self.current_pen_color = color_code
         self.color_btns[self.current_pen_color].configure(border_width=3, border_color="white")
         
-    def change_pen_width(self, value):
-        self.current_line_width = int(value)
-        self.width_label.configure(text=f"현재 굵기: {self.current_line_width}")
+    def decrease_width(self):
+        if self.current_line_width > 1:
+            self.current_line_width -= 1
+            self.width_label.configure(text=f"현재 굵기: {self.current_line_width}")
+
+    def increase_width(self):
+        if self.current_line_width < 15:
+            self.current_line_width += 1
+            self.width_label.configure(text=f"현재 굵기: {self.current_line_width}")
 
     def on_press(self, event): 
         self.start_x = event.x
@@ -900,7 +921,7 @@ class ImageEditorWindow(ctk.CTkToplevel):
         self.current_rect_id = self.canvas.create_rectangle(
             self.start_x, self.start_y, self.start_x, self.start_y, 
             outline=self.current_pen_color, 
-            width=self.current_line_width # 💡 사용자가 지정한 굵기로 미리보기 렌더링
+            width=self.current_line_width 
         )
 
     def on_drag(self, event): 
@@ -916,7 +937,7 @@ class ImageEditorWindow(ctk.CTkToplevel):
             self.coords.append({
                 'bbox': (min(orig_x1, orig_x2), min(orig_y1, orig_y2), max(orig_x1, orig_x2), max(orig_y1, orig_y2)),
                 'color': self.current_pen_color,
-                'width': self.current_line_width # 💡 네모를 그릴 때의 선 굵기도 같이 메모리에 저장해 둠
+                'width': self.current_line_width 
             })
         else: 
             self.canvas.delete(self.current_rect_id)
@@ -936,7 +957,6 @@ class ImageEditorWindow(ctk.CTkToplevel):
             draw = ImageDraw.Draw(final_img)
             
             for coord in self.coords: 
-                # 💡 원본 이미지 크기에 맞춰서 선 굵기를 정비례하게 키워줌
                 scaled_width = max(1, int(coord['width'] / self.scale_factor))
                 draw.rounded_rectangle(
                     coord['bbox'], 
@@ -952,7 +972,7 @@ class ImageEditorWindow(ctk.CTkToplevel):
             self.lbl_path.configure(text=f"🖍️ [편집됨] {edited_filename}", text_color="#00FFCC")
             
             messagebox.showinfo("편집 완료", "사진에 강조 표시가 적용되었습니다!")
-            self.destroy() 
+            self.close_window() # 여기서도 안전 종료 로직으로 처리
         except Exception as e: 
             messagebox.showerror("저장 실패", f"사진을 저장할 수 없습니다.\n{e}")
 
