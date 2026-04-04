@@ -339,8 +339,6 @@ class ICQA_AutoReportApp(ctk.CTk):
         self.sel_win = ctk.CTkToplevel(self)
         self.sel_win.title("Defect Type 및 사유 입력/사진 관리 (결재)")
         self.center_window(self.sel_win, 950, 750)
-        # 💡 [버그 수정 1] 캡처 도구를 가리지 않도록 항상 위에 속성 제거!
-        # self.sel_win.attributes("-topmost", True)  <-- 제거됨
         self.sel_win.focus_force()
         self.sel_win.grab_set() 
         
@@ -451,9 +449,7 @@ class ICQA_AutoReportApp(ctk.CTk):
         manager_win = ctk.CTkToplevel(self.sel_win)
         manager_win.title(f"No.{record_dict['GLOBAL_RANK']} 바코드: {record_dict[self.barcode_col_name]} 현장 사진 관리")
         
-        # 💡 [버그 수정 2] 창 폭을 800으로 늘리고 항상 위 속성 제거!
         self.center_window(manager_win, 800, 500)
-        # manager_win.attributes("-topmost", True) <-- 제거됨 (캡처 도구 충돌 방지)
         manager_win.focus_force()
         manager_win.grab_set()
         
@@ -477,28 +473,22 @@ class ICQA_AutoReportApp(ctk.CTk):
             slot_frame = ctk.CTkFrame(slots_frame, fg_color="transparent")
             slot_frame.pack(fill="x", pady=10, padx=10)
             
-            # 왼쪽: 항목 이름
             ctk.CTkLabel(slot_frame, text=name, font=("Arial", 13, "bold"), width=220, anchor="w").pack(side="left", padx=10)
             
-            # 💡 [버그 수정 3] 버튼 레이아웃 로직 완벽 개편! (절대 화면 밖으로 밀리지 않게 우측 고정)
             btn_f = ctk.CTkFrame(slot_frame, fg_color="transparent")
             btn_f.pack(side="right", padx=10)
             
             current_path = record_dict['ATTACHED_IMAGES'][slot_num]
             lbl_path = ctk.CTkLabel(slot_frame, text=os.path.basename(current_path) if current_path else "사진 없음", text_color="gray", anchor="w")
             
-            # 버튼 2개 생성 (오른쪽 프레임 안에 배치)
             btn_edit = ctk.CTkButton(btn_f, text="🖍️ 편집/강조", width=90, fg_color="#2B547E", hover_color="#224263", state="normal" if current_path else "disabled")
             btn_find = ctk.CTkButton(btn_f, text="📁 파일 찾기", width=90)
             
             btn_edit.configure(command=lambda s=slot_num, l=lbl_path: open_editor(s, l))
             btn_find.configure(command=lambda s=slot_num, l=lbl_path, b=btn_edit: find_file(s, l, b))
             
-            # 우측부터 차례대로 정렬
             btn_edit.pack(side="right", padx=3)
             btn_find.pack(side="right", padx=3)
-            
-            # 가운데: 사진 경로 텍스트 (남는 공간을 모두 차지하도록 expand=True)
             lbl_path.pack(side="left", fill="x", expand=True, padx=10)
             
         ctk.CTkButton(manager_win, text="사진 저장 및 닫기", height=40, font=("Arial", 14, "bold"), fg_color="green", command=manager_win.destroy).pack(pady=20)
@@ -708,8 +698,16 @@ class ICQA_AutoReportApp(ctk.CTk):
         self.snip_window.attributes('-alpha', 0.3)
         self.snip_window.overrideredirect(True) 
         self.snip_window.config(cursor="cross")
-        try: self.snip_window.geometry(f"{self.winfo_screenwidth()}x{self.winfo_screenheight()}+0+0")
-        except Exception: self.snip_window.attributes('-fullscreen', True)
+        
+        try: 
+            user32 = ctypes.windll.user32
+            v_x = user32.GetSystemMetrics(76)
+            v_y = user32.GetSystemMetrics(77)
+            v_w = user32.GetSystemMetrics(78)
+            v_h = user32.GetSystemMetrics(79)
+            self.snip_window.geometry(f"{v_w}x{v_h}+{v_x}+{v_y}")
+        except Exception: 
+            self.snip_window.attributes('-fullscreen', True)
             
         self.snip_window.bind("<ButtonPress-1>", self.on_press)
         self.snip_window.bind("<B1-Motion>", self.on_drag)
@@ -727,12 +725,15 @@ class ICQA_AutoReportApp(ctk.CTk):
         self.canvas.coords(self.rect, self.start_x, self.start_y, self.snip_window.winfo_pointerx(), self.snip_window.winfo_pointery())
 
     def on_release(self, event, num): 
+        end_x = self.snip_window.winfo_pointerx()
+        end_y = self.snip_window.winfo_pointery()
         self.snip_window.destroy()
         self.deiconify() 
-        x1, y1 = min(self.start_x, self.snip_window.winfo_pointerx()), min(self.start_y, self.snip_window.winfo_pointery())
-        x2, y2 = max(self.start_x, self.snip_window.winfo_pointerx()), max(self.start_y, self.snip_window.winfo_pointery())
+        
+        x1, y1 = min(self.start_x, end_x), min(self.start_y, end_y)
+        x2, y2 = max(self.start_x, end_x), max(self.start_y, end_y)
         if (x2 - x1) > 10 and (y2 - y1) > 10: 
-            self.coords[num] = (x1, y1, x2, y2)
+            self.coords[num] = (int(x1), int(y1), int(x2), int(y2))
             self.save_coords()
             self.coord_labels[num].configure(text="✅ 지정됨")
 
@@ -776,20 +777,28 @@ class ICQA_AutoReportApp(ctk.CTk):
         coord = self.coords[num]
         if coord: 
             self.hide_guide()
-            if self.remote:
+            if self.remote and self.remote.winfo_exists():
                 self.remote.withdraw()
             self.withdraw()
             self.after(300, lambda: self._do_capture(num, coord))
 
     def _do_capture(self, num, coord): 
-        bbox = (coord[0], coord[1], coord[2], coord[3])
-        img = ImageGrab.grab(bbox=bbox, all_screens=True)
-        filename = f"Capture_{num}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-        img.save(filename)
-        self.session_captures.append(filename)
-        if self.remote:
-            self.remote.deiconify()
-        self.deiconify()
+        try:
+            bbox = (int(coord[0]), int(coord[1]), int(coord[2]), int(coord[3]))
+            try:
+                img = ImageGrab.grab(bbox=bbox, all_screens=True)
+            except Exception:
+                img = ImageGrab.grab(bbox=bbox)
+                
+            filename = f"Capture_{num}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+            img.save(filename)
+            self.session_captures.append(filename)
+        except Exception as e:
+            messagebox.showerror("캡처 오류", f"캡처 중 문제가 발생했습니다:\n{str(e)}")
+        finally:
+            if self.remote and self.remote.winfo_exists():
+                self.remote.deiconify()
+            self.deiconify()
 
 # ==========================================
 # 🖌️ 둥근 강조 박스 포토 편집기 완벽 구현!
@@ -800,6 +809,7 @@ class ImageEditorWindow(ctk.CTkToplevel):
         self.title("ICQA 현장 사진 강조 편집기")
         self.img_path = img_path
         self.current_pen_color = "#FF0000"
+        self.current_line_width = 4  # 💡 기본 굵기를 4로 설정
         self.coords = []
         
         self.record_dict = record_dict
@@ -821,13 +831,11 @@ class ImageEditorWindow(ctk.CTkToplevel):
         self.display_pil_img = self.original_pil_img.resize((final_w, final_h), Image.Resampling.LANCZOS)
         self.photo_img = ImageTk.PhotoImage(self.display_pil_img)
         
-        self.center_window(final_w + 150, final_h + 100)
-        # 💡 [버그 수정 4] 편집기 창도 항상 위에 속성 제거! 캡처 도구 방해 금지!
-        # self.attributes("-topmost", True) <-- 제거됨
+        self.center_window(final_w + 170, final_h + 100)
         self.focus_force()
         self.grab_set()
         
-        ctk.CTkLabel(self, text="💡 마우스로 드래그하여 '둥근 강조 네모'를 그리세요. 오른쪽에서 색상을 변경할 수 있습니다.", font=("Arial", 14, "bold")).pack(pady=10)
+        ctk.CTkLabel(self, text="💡 마우스로 드래그하여 강조 네모를 그리세요. 오른쪽에서 색상과 선 굵기를 변경할 수 있습니다.", font=("Arial", 14, "bold")).pack(pady=10)
         main_frame = ctk.CTkFrame(self)
         main_frame.pack(pady=5, padx=10, fill="both", expand=True)
         
@@ -839,23 +847,34 @@ class ImageEditorWindow(ctk.CTkToplevel):
         self.canvas.bind("<B1-Motion>", self.on_drag)
         self.canvas.bind("<ButtonRelease-1>", self.on_release)
         
-        palette_frame = ctk.CTkFrame(main_frame, width=120)
+        palette_frame = ctk.CTkFrame(main_frame, width=140)
         palette_frame.pack(side="right", fill="y", padx=5)
-        ctk.CTkLabel(palette_frame, text="🎨 강조 색상", font=("Arial", 13, "bold")).pack(pady=10)
         
+        # 🎨 색상 선택 영역
+        ctk.CTkLabel(palette_frame, text="🎨 강조 색상", font=("Arial", 13, "bold")).pack(pady=(10, 5))
         colors = [("#FF0000", "빨강"), ("#0000FF", "파랑"), ("#FFFF00", "노랑"), ("#00FF00", "초록")]
         self.color_btns = {}
         for code, name in colors:
             btn = ctk.CTkButton(palette_frame, text=name, font=("Arial", 12), width=100, height=35, fg_color=code, text_color="black" if name in ["노랑", "초록"] else "white", hover_color=code, command=lambda c=code: self.change_pen_color(c))
-            btn.pack(pady=5)
+            btn.pack(pady=3)
             self.color_btns[code] = btn
-            
         self.color_btns[self.current_pen_color].configure(border_width=3, border_color="white")
+
+        # 📏 선 굵기 조절 영역 (추가된 기능!)
+        ctk.CTkLabel(palette_frame, text="━━━━━━━━━━", text_color="gray").pack(pady=5)
+        ctk.CTkLabel(palette_frame, text="📏 선 굵기", font=("Arial", 13, "bold")).pack(pady=(5, 5))
+        
+        self.width_label = ctk.CTkLabel(palette_frame, text=f"현재 굵기: {self.current_line_width}", font=("Arial", 12))
+        self.width_label.pack(pady=0)
+        
+        self.width_slider = ctk.CTkSlider(palette_frame, from_=2, to_=15, width=120, command=self.change_pen_width)
+        self.width_slider.set(self.current_line_width)
+        self.width_slider.pack(pady=(5, 15))
         
         bot_frame = ctk.CTkFrame(self, fg_color="transparent")
         bot_frame.pack(side="bottom", fill="x", pady=15, padx=20)
         
-        ctk.CTkButton(bot_frame, text="🖍️ 강조선 초기화", width=120, fg_color="darkred", hover_color="maroon", command=self.clear_canvas).pack(side="left")
+        ctk.CTkButton(bot_frame, text="🖍️ 화면 초기화", width=120, fg_color="darkred", hover_color="maroon", command=self.clear_canvas).pack(side="left")
         ctk.CTkButton(bot_frame, text="❌ 취소 및 닫기", width=120, fg_color="#454545", command=self.destroy).pack(side="right", padx=5)
         ctk.CTkButton(bot_frame, text="✨ 편집 완료 및 사진 적용 ✨", width=200, height=40, font=("Arial", 14, "bold"), fg_color="green", command=self.save_edits).pack(side="right", padx=15)
 
@@ -870,11 +889,19 @@ class ImageEditorWindow(ctk.CTkToplevel):
         self.color_btns[self.current_pen_color].configure(border_width=0)
         self.current_pen_color = color_code
         self.color_btns[self.current_pen_color].configure(border_width=3, border_color="white")
+        
+    def change_pen_width(self, value):
+        self.current_line_width = int(value)
+        self.width_label.configure(text=f"현재 굵기: {self.current_line_width}")
 
     def on_press(self, event): 
         self.start_x = event.x
         self.start_y = event.y
-        self.current_rect_id = self.canvas.create_rectangle(self.start_x, self.start_y, self.start_x, self.start_y, outline=self.current_pen_color, width=3)
+        self.current_rect_id = self.canvas.create_rectangle(
+            self.start_x, self.start_y, self.start_x, self.start_y, 
+            outline=self.current_pen_color, 
+            width=self.current_line_width # 💡 사용자가 지정한 굵기로 미리보기 렌더링
+        )
 
     def on_drag(self, event): 
         self.canvas.coords(self.current_rect_id, self.start_x, self.start_y, event.x, event.y)
@@ -888,7 +915,8 @@ class ImageEditorWindow(ctk.CTkToplevel):
             
             self.coords.append({
                 'bbox': (min(orig_x1, orig_x2), min(orig_y1, orig_y2), max(orig_x1, orig_x2), max(orig_y1, orig_y2)),
-                'color': self.current_pen_color
+                'color': self.current_pen_color,
+                'width': self.current_line_width # 💡 네모를 그릴 때의 선 굵기도 같이 메모리에 저장해 둠
             })
         else: 
             self.canvas.delete(self.current_rect_id)
@@ -906,10 +934,16 @@ class ImageEditorWindow(ctk.CTkToplevel):
         try:
             final_img = self.original_pil_img.copy()
             draw = ImageDraw.Draw(final_img)
-            line_w = int(max(final_img.width, final_img.height) / 300)
             
             for coord in self.coords: 
-                draw.rounded_rectangle(coord['bbox'], radius=int(line_w * 4), outline=coord['color'], width=line_w)
+                # 💡 원본 이미지 크기에 맞춰서 선 굵기를 정비례하게 키워줌
+                scaled_width = max(1, int(coord['width'] / self.scale_factor))
+                draw.rounded_rectangle(
+                    coord['bbox'], 
+                    radius=int(scaled_width * 2), 
+                    outline=coord['color'], 
+                    width=scaled_width
+                )
                 
             edited_filename = f"edited_slot{self.slot_num}_{datetime.now().strftime('%H%M%S')}.png"
             final_img.save(edited_filename)
