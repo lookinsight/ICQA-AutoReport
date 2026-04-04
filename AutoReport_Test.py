@@ -42,13 +42,11 @@ class ICQA_AutoReportApp(ctk.CTk):
         self.guide_win = None
         self.barcode_candidates = {} 
 
-        # 💡 [핵심 변경] 외부 필수 파일 존재 여부 확인 (폰트만 검사)
         if not os.path.exists(FONT_PATH):
             messagebox.showerror("필수 파일 누락", f"프로그램 폴더 안에 '{FONT_PATH}' (한글 폰트) 파일이 반드시 있어야 합니다.\n\n프로그램을 종료합니다.")
             self.destroy()
             return
             
-        # 화살표 아이콘 자동 생성 함수 호출 (없으면 알아서 그립니다!)
         self.auto_create_arrow_icon()
 
         # ==========================================
@@ -92,7 +90,7 @@ class ICQA_AutoReportApp(ctk.CTk):
         self.result_box.pack(padx=20, pady=(5, 10), fill="x")
 
         # ==========================================
-        # 📸 [2단계] 파워 BI 캡처 리모컨 UI
+        # 📸 [2단계] 파워 BI 대시보드 캡처
         # ==========================================
         frame_capture = ctk.CTkFrame(self)
         frame_capture.pack(pady=10, padx=20, fill="both", expand=True)
@@ -128,13 +126,11 @@ class ICQA_AutoReportApp(ctk.CTk):
         y = int((screen_height / 2) - (height / 2))
         target_window.geometry(f"{width}x{height}+{x}+{y}")
 
-    # 💡 [새 기능] 프로그램이 켜질 때 화살표 이미지가 없으면 알아서 예쁘게 그려내는 마법!
     def auto_create_arrow_icon(self):
         if not os.path.exists(ARROW_ICON_PATH):
             print(f"[{ARROW_ICON_PATH}] 파일이 없어 자동 생성합니다...")
             img = Image.new("RGBA", (100, 40), (255, 255, 255, 0))
             draw = ImageDraw.Draw(img)
-            # 네이비 블루 몸통 + 오렌지색 머리
             draw.rectangle([10, 10, 70, 30], fill="#2B547E")
             draw.polygon([(70, 0), (100, 20), (70, 40)], fill="#E56717")
             img.save(ARROW_ICON_PATH)
@@ -164,7 +160,6 @@ class ICQA_AutoReportApp(ctk.CTk):
 
     def force_pixel_wrap(self, text, font, max_width):
         if not text: return ""
-        
         text = str(text).replace('\r', '')
         text = re.sub(r'\n+', '\n', text).strip()
         
@@ -177,23 +172,14 @@ class ICQA_AutoReportApp(ctk.CTk):
                 spacer = " " if current_line else ""
                 test_line = current_line + spacer + word
                 
-                try:
-                    w = font.getlength(test_line)
-                except:
-                    try:
-                        w = font.getsize(test_line)[0]
-                    except:
-                        bbox = font.getbbox(test_line)
-                        w = bbox[2] if bbox else len(test_line)*7
-                
-                if w > max_width:
+                if self.get_text_width(font, test_line) > max_width:
                     if current_line:
                         final_lines.append(current_line)
                         current_line = word
                     else:
                         char_line = ""
                         for char in word:
-                            if font.getlength(char_line + char) < max_width:
+                            if self.get_text_width(font, char_line + char) < max_width:
                                 char_line += char
                             else:
                                 final_lines.append(char_line)
@@ -361,7 +347,7 @@ class ICQA_AutoReportApp(ctk.CTk):
             clean_b = self.clean_barcode(selected_barcode)
             self.result_box.insert(tk.END, f"[{r_type}] 검색 바코드: {clean_b}\n")
 
-  def open_defect_selector(self):
+    def open_defect_selector(self):
         self.sel_win = ctk.CTkToplevel(self)
         self.sel_win.title("Defect Type 및 사유 입력/사진 관리 (결재)")
         self.center_window(self.sel_win, 950, 700) 
@@ -378,8 +364,6 @@ class ICQA_AutoReportApp(ctk.CTk):
         for i, row in enumerate(self.final_report_data):
             row_dict = row.to_dict()
             row_dict['ATTACHED_IMAGES'] = {"1": None, "2": None, "3": None, "4": None} 
-            
-            # 💡 [버그 수정] 사진 팝업창이 뻗지 않도록, 창 제목에 쓸 순번(RANK)을 여기서 미리 부여합니다!
             row_dict['RANK'] = i + 1 
 
             row_frame = ctk.CTkFrame(scroll_frame)
@@ -479,13 +463,11 @@ class ICQA_AutoReportApp(ctk.CTk):
 
         ctk.CTkButton(manager_win, text="사진 저장 및 닫기", height=40, font=("Arial", 14, "bold"), fg_color="green", command=manager_win.destroy).pack(pady=20)
 
-
     def generate_final_tables(self):
         updated_report_list = []
         for index, (row_dict, combo, entry, r_type) in enumerate(self.entries_data):
             row_dict['DEFECT_TYPE'] = combo.get()
             row_dict['FINAL_DIVE_DEEP'] = entry.get() 
-            row_dict['RANK'] = index + 1
             updated_report_list.append(row_dict)
             
         self.sel_win.destroy() 
@@ -567,9 +549,8 @@ class ICQA_AutoReportApp(ctk.CTk):
                 draw.rectangle([x_off, y_off, x_off+w, y_off + header_height], outline=color_border)
                 
                 try:
-                    text_bbox = font_header.getbbox(name)
-                    text_w = text_bbox[2] - text_bbox[0]
-                    text_h = text_bbox[3] - text_bbox[1]
+                    text_w = self.get_text_width(font_header, name)
+                    text_h = 14
                 except:
                     text_w = len(name) * 8 
                     text_h = 14
