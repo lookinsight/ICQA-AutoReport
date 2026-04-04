@@ -83,7 +83,6 @@ class ICQA_AutoReportApp(ctk.CTk):
         ctk.CTkRadioButton(frame_barcode_opt, text="1위 바코드", variable=self.barcode_mode, value="top1", command=self.update_barcode_text).pack(side="left", padx=(10, 5))
         ctk.CTkRadioButton(frame_barcode_opt, text="🎲랜덤 바코드", variable=self.barcode_mode, value="random", command=self.update_barcode_text).pack(side="left", padx=5)
 
-        # 💡 [룩희 피드백 반영 2] 버튼 이름 변경! (VLOOKUP -> Data 병합)
         self.btn_run = ctk.CTkButton(frame_excel, text="🚀 Data 병합 및 Defect Type 선택", fg_color="green", hover_color="darkgreen", height=45, command=self.process_data)
         self.btn_run.pack(pady=15, padx=20, fill="x")
 
@@ -352,7 +351,8 @@ class ICQA_AutoReportApp(ctk.CTk):
         self.sel_win = ctk.CTkToplevel(self)
         self.sel_win.title("Defect Type 및 사유 입력/사진 관리 (결재)")
         self.center_window(self.sel_win, 950, 700) 
-        self.sel_win.attributes("-topmost", True)
+        # 💡 [핵심 해결] 결재 창의 VIP 권한(-topmost)을 완전히 삭제했습니다!
+        self.sel_win.focus_force() # 대신 창을 부드럽게 맨 앞으로 호출합니다.
         self.sel_win.grab_set() 
 
         ctk.CTkLabel(self.sel_win, text="📌 Defect Type을 선택하고 누락된 사유 입력 및 현장 사진을 첨부해주세요.", font=("Arial", 16, "bold")).pack(pady=15)
@@ -410,7 +410,8 @@ class ICQA_AutoReportApp(ctk.CTk):
         manager_win = ctk.CTkToplevel(self.sel_win)
         manager_win.title(f"No.{record_dict['RANK']} 바코드: {record_dict[self.barcode_col_name]} 현장 사진 관리")
         self.center_window(manager_win, 700, 500)
-        manager_win.attributes("-topmost", True)
+        # 💡 [핵심 해결] 사진 관리 창의 VIP 권한(-topmost)도 완전히 삭제했습니다!
+        manager_win.focus_force() # 대신 창을 부드럽게 맨 앞으로 호출합니다.
         manager_win.grab_set()
 
         slots_frame = ctk.CTkFrame(manager_win)
@@ -426,15 +427,9 @@ class ICQA_AutoReportApp(ctk.CTk):
         manager_win.slot_images = {} 
 
         def find_file(slot_num, lbl_path):
-            # 💡 [룩희 피드백 반영 1] 파일 선택 창이 열리기 직전에 VIP 권한(최상단 고정)을 잠시 끕니다!
-            manager_win.attributes("-topmost", False)
-            
-            # parent=manager_win 을 주어 탐색기가 사진 창 바로 위에 뜨게 합니다.
+            # 💡 VIP 권한을 껐다 켰다 하는 복잡한 로직을 완전히 덜어냈습니다!
             file_path = filedialog.askopenfilename(parent=manager_win, filetypes=[("Image files", "*.jpg *.jpeg *.png")])
             
-            # 선택이 끝났으면 팝업창의 VIP 권한을 다시 복구합니다.
-            manager_win.attributes("-topmost", True)
-
             if file_path:
                 record_dict['ATTACHED_IMAGES'][slot_num] = file_path
                 filename = os.path.basename(file_path)
@@ -901,7 +896,8 @@ class ImageEditorWindow(ctk.CTkToplevel):
         app_w = final_w + 150 
         app_h = final_h + 100 
         self.center_window(app_w, app_h)
-        self.attributes("-topmost", True)
+        # 💡 [핵심 해결] 편집기 창도 캡처 도구 등을 가리지 않도록 VIP 권한 삭제!
+        self.focus_force() 
         self.grab_set()
 
         ctk.CTkLabel(self, text="💡 마우스로 사진 위를 드래그하여 '둥근 강조 네모'를 그리세요. 오른쪽에서 색상을 변경할 수 있습니다.", font=("Arial", 14, "bold")).pack(pady=10)
