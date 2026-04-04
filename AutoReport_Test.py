@@ -30,7 +30,7 @@ class ICQA_AutoReportApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("AutoReport_Master")
-        self.center_window(self, 550, 800) 
+        self.center_window(self, 600, 800) 
         
         self.raw_filepath = None
         self.dive_filepath = None
@@ -41,7 +41,9 @@ class ICQA_AutoReportApp(ctk.CTk):
         self.guide_win = None
         self.barcode_candidates = {} 
         self.selected_barcodes_dict = {} 
-        self.session_captures = [] 
+        
+        # 💡 [업데이트] BI 캡처 파일들을 번호별로 정확히 관리하기 위한 딕셔너리
+        self.latest_captures = {"1": None, "2": None, "3": None, "4": None, "5": None}
 
         if not os.path.exists(FONT_PATH):
             messagebox.showerror("필수 파일 누락", f"프로그램 폴더 안에 '{FONT_PATH}' (한글 폰트) 파일이 반드시 있어야 합니다.\n\n프로그램을 종료합니다.")
@@ -96,20 +98,28 @@ class ICQA_AutoReportApp(ctk.CTk):
         frame_capture = ctk.CTkFrame(self)
         frame_capture.pack(pady=10, padx=20, fill="both", expand=True)
 
-        ctk.CTkLabel(frame_capture, text="[2단계] 파워 BI 대시보드 캡처", font=("Arial", 16, "bold")).pack(pady=(10, 5))
+        ctk.CTkLabel(frame_capture, text="[2단계] 파워 BI 대시보드 캡처 (1번:전체 / 2~5번:분할)", font=("Arial", 16, "bold")).pack(pady=(10, 5))
         
         self.coord_labels = {}
+        self.btn_edits_bi = {} # 💡 [업데이트] BI 캡처용 편집 버튼들을 담을 딕셔너리
+        
         for i in range(1, 6):
             row_frame = ctk.CTkFrame(frame_capture, fg_color="transparent")
             row_frame.pack(pady=3, fill="x", padx=10)
             
-            btn_snip = ctk.CTkButton(row_frame, text=f"📍 {i}번 지정", width=100, command=lambda num=str(i): self.start_snip(num))
+            btn_snip = ctk.CTkButton(row_frame, text=f"📍 {i}번 지정", width=80, command=lambda num=str(i): self.start_snip(num))
             btn_snip.pack(side="left", padx=5)
             
             status_text = "✅ 지정됨" if self.coords[str(i)] else "❌ 미지정"
-            lbl = ctk.CTkLabel(row_frame, text=status_text, width=70)
+            text_color = "white" if self.coords[str(i)] else "gray"
+            lbl = ctk.CTkLabel(row_frame, text=status_text, width=80, text_color=text_color)
             lbl.pack(side="left", padx=5)
             self.coord_labels[str(i)] = lbl
+            
+            # 💡 [업데이트] BI 캡처 에디터 열기 버튼 추가!
+            btn_edit_bi = ctk.CTkButton(row_frame, text="🖍️ 편집", width=60, fg_color="#2B547E", hover_color="#224263", state="disabled", command=lambda num=str(i): self.open_bi_editor(num))
+            btn_edit_bi.pack(side="left", padx=5)
+            self.btn_edits_bi[str(i)] = btn_edit_bi
             
             btn_del = ctk.CTkButton(row_frame, text="❌ 삭제", width=50, fg_color="darkred", hover_color="maroon", command=lambda num=str(i): self.delete_coord(num))
             btn_del.pack(side="left", padx=5)
@@ -415,7 +425,7 @@ class ICQA_AutoReportApp(ctk.CTk):
             return
 
         old_b = self.clean_barcode(old_b_input)
-        new_b = self.clean_barcode(new_b_input)
+        new_b = self.clean barcode(new_b_input)
 
         mask_old = (self.df_grouped_sess[self.barcode_col_name] == old_b)
         if not self.df_grouped_sess[mask_old].any().any():
@@ -445,6 +455,7 @@ class ICQA_AutoReportApp(ctk.CTk):
         self.open_defect_selector() 
         messagebox.showinfo("교체 완료", f"선수 교체가 성공적으로 완료되었습니다!")
 
+    # 💡 [업데이트] 콜백 함수 구조로 개선된 현장 사진 매니저
     def open_image_manager(self, record_dict):
         manager_win = ctk.CTkToplevel(self.sel_win)
         manager_win.title(f"No.{record_dict['GLOBAL_RANK']} 바코드: {record_dict[self.barcode_col_name]} 현장 사진 관리")
@@ -467,7 +478,11 @@ class ICQA_AutoReportApp(ctk.CTk):
         def open_editor(slot_num, lbl_path):
             img_path = record_dict['ATTACHED_IMAGES'][slot_num]
             if img_path: 
-                ImageEditorWindow(manager_win, img_path, record_dict, slot_num, lbl_path) 
+                # 에디터가 편집 성공 후 호출할 콜백 함수 정의!
+                def on_save_callback(new_path):
+                    record_dict['ATTACHED_IMAGES'][slot_num] = new_path
+                    lbl_path.configure(text=f"🖍️ [편집됨] {os.path.basename(new_path)}", text_color="#00FFCC")
+                ImageEditorWindow(manager_win, img_path, on_save_callback) 
                 
         for slot_num, name in slot_names.items():
             slot_frame = ctk.CTkFrame(slots_frame, fg_color="transparent")
@@ -492,6 +507,15 @@ class ICQA_AutoReportApp(ctk.CTk):
             lbl_path.pack(side="left", fill="x", expand=True, padx=10)
             
         ctk.CTkButton(manager_win, text="사진 저장 및 닫기", height=40, font=("Arial", 14, "bold"), fg_color="green", command=manager_win.destroy).pack(pady=20)
+
+    # 💡 [업데이트] BI 캡처 에디터 실행 함수 (현장사진 에디터 로직 재활용!)
+    def open_bi_editor(self, num):
+        path = self.latest_captures.get(num)
+        if path and os.path.exists(path):
+            def on_save_callback(new_path):
+                self.latest_captures[num] = new_path
+                self.coord_labels[num].configure(text="🖍️ 편집됨", text_color="yellow")
+            ImageEditorWindow(self, path, on_save_callback)
 
     def generate_final_tables(self):
         updated_report_list = []
@@ -522,22 +546,60 @@ class ICQA_AutoReportApp(ctk.CTk):
         ImageDraw.Draw(main_title_img).text((20, 25), f"📊 ICQA Daily Auto-Report ({self.date_combo.get()})", font=ImageFont.truetype(FONT_PATH, 28), fill=color_navy)
         report_segments.append(main_title_img)
 
-        for cap_file in self.session_captures:
-            if os.path.exists(cap_file):
-                try:
-                    with Image.open(cap_file) as cap_img:
-                        new_w = table_width - 40
-                        new_h = int(cap_img.height * (new_w / cap_img.width))
-                        cap_img_resized = cap_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-                        bg = Image.new('RGB', (table_width, new_h + 30), color_white)
-                        bg.paste(cap_img_resized, (20, 10))
-                        ImageDraw.Draw(bg).rectangle([20, 10, 20+new_w, 10+new_h], outline=color_border, width=2)
-                        report_segments.append(bg)
-                except Exception as e: 
-                    print(f"{cap_file} 병합 실패: {e}")
-                    
-        report_segments.append(Image.new('RGB', (table_width, 20), color_white))
+        # 💡 [업데이트] BI 캡처 대시보드형 레이아웃 구현 (가장 중요한 부분!)
+        TARGET_H = 350
+        margin = 20
+        full_w = table_width - 40
+        half_w = (full_w - margin) // 2
+        
+        row1_caps = [self.latest_captures.get("1")]
+        row2_caps = [self.latest_captures.get("2"), self.latest_captures.get("3")]
+        row3_caps = [self.latest_captures.get("4"), self.latest_captures.get("5")]
 
+        def create_capture_row(img_paths, is_half=False):
+            valid_paths = [p for p in img_paths if p and os.path.exists(p)]
+            if not valid_paths: return None
+
+            row_img = Image.new('RGB', (table_width, TARGET_H + 20), color_white)
+            draw = ImageDraw.Draw(row_img)
+
+            if is_half:
+                for idx, path in enumerate(img_paths):
+                    if path and os.path.exists(path):
+                        box_x = 20 if idx == 0 else 20 + half_w + margin
+                        try:
+                            with Image.open(path) as cap:
+                                cap.thumbnail((half_w, TARGET_H), Image.Resampling.LANCZOS)
+                                paste_x = box_x + (half_w - cap.width) // 2
+                                paste_y = 10 + (TARGET_H - cap.height) // 2
+                                row_img.paste(cap, (paste_x, paste_y))
+                        except Exception as e: print(e)
+                        draw.rectangle([box_x, 10, box_x + half_w, 10 + TARGET_H], outline=color_border, width=2)
+            else:
+                path = img_paths[0]
+                if path and os.path.exists(path):
+                    box_x = 20
+                    try:
+                        with Image.open(path) as cap:
+                            cap.thumbnail((full_w, TARGET_H), Image.Resampling.LANCZOS)
+                            paste_x = box_x + (full_w - cap.width) // 2
+                            paste_y = 10 + (TARGET_H - cap.height) // 2
+                            row_img.paste(cap, (paste_x, paste_y))
+                    except Exception as e: print(e)
+                    draw.rectangle([box_x, 10, box_x + full_w, 10 + TARGET_H], outline=color_border, width=2)
+            return row_img
+
+        seg1 = create_capture_row(row1_caps, is_half=False)
+        seg2 = create_capture_row(row2_caps, is_half=True)
+        seg3 = create_capture_row(row3_caps, is_half=True)
+
+        if seg1: report_segments.append(seg1)
+        if seg2: report_segments.append(seg2)
+        if seg3: report_segments.append(seg3)
+        if seg1 or seg2 or seg3:
+            report_segments.append(Image.new('RGB', (table_width, 20), color_white))
+
+        # 데이터 테이블 생성
         df_final = pd.DataFrame(updated_report_list)
         
         for r_type in df_final['RESOLVETYPE'].unique():
@@ -689,7 +751,9 @@ class ICQA_AutoReportApp(ctk.CTk):
     def delete_coord(self, num): 
         self.coords[num] = None
         self.save_coords()
-        self.coord_labels[num].configure(text="❌ 미지정")
+        self.latest_captures[num] = None
+        self.coord_labels[num].configure(text="❌ 미지정", text_color="gray")
+        self.btn_edits_bi[num].configure(state="disabled")
         self.hide_guide()
 
     def start_snip(self, num):
@@ -735,7 +799,7 @@ class ICQA_AutoReportApp(ctk.CTk):
         if (x2 - x1) > 10 and (y2 - y1) > 10: 
             self.coords[num] = (int(x1), int(y1), int(x2), int(y2))
             self.save_coords()
-            self.coord_labels[num].configure(text="✅ 지정됨")
+            self.coord_labels[num].configure(text="✅ 지정됨", text_color="white")
 
     def open_remote(self):
         if self.remote is not None and self.remote.winfo_exists(): 
@@ -792,7 +856,12 @@ class ICQA_AutoReportApp(ctk.CTk):
                 
             filename = f"Capture_{num}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
             img.save(filename)
-            self.session_captures.append(filename)
+            
+            # 💡 [업데이트] 캡처 성공 시 최신 파일로 등록하고 에디터 버튼 활성화
+            self.latest_captures[num] = filename
+            self.coord_labels[num].configure(text="✅ 캡처 완료", text_color="#00FFCC")
+            self.btn_edits_bi[num].configure(state="normal")
+            
         except Exception as e:
             messagebox.showerror("캡처 오류", f"캡처 중 문제가 발생했습니다:\n{str(e)}")
         finally:
@@ -801,30 +870,26 @@ class ICQA_AutoReportApp(ctk.CTk):
             self.deiconify()
 
 # ==========================================
-# 🖌️ 둥근 강조 박스 포토 편집기 완벽 구현!
+# 🖌️ 둥근 강조 박스 포토 편집기 (콜백 기능 추가로 완벽 범용화)
 # ==========================================
 class ImageEditorWindow(ctk.CTkToplevel):
-    def __init__(self, parent_win, img_path, record_dict, slot_num, lbl_path):
+    def __init__(self, parent_win, img_path, on_save_callback):
         super().__init__(parent_win)
-        self.title("ICQA 현장 사진 강조 편집기")
-        
-        # 💡 [좀비 창 완벽 방어] X 버튼 강제 종료 로직 연결
+        self.title("ICQA 사진 강조 편집기")
         self.protocol("WM_DELETE_WINDOW", self.close_window)
         
         self.img_path = img_path
+        self.on_save_callback = on_save_callback # 💡 저장 후 실행될 함수를 외부에서 받음
+        
         self.current_pen_color = "#FF0000"
         self.current_line_width = 4  
         self.coords = []
-        
-        self.record_dict = record_dict
-        self.slot_num = slot_num
-        self.lbl_path = lbl_path
         
         try: 
             self.original_pil_img = Image.open(img_path).convert('RGB')
         except Exception: 
             messagebox.showerror("이미지 로드 실패", f"{img_path} 로드 실패")
-            self.close_window() # 에러 나도 안전하게 닫기
+            self.close_window() 
             return
         
         max_w, max_h = 1000, 700
@@ -869,7 +934,6 @@ class ImageEditorWindow(ctk.CTkToplevel):
         self.width_label = ctk.CTkLabel(palette_frame, text=f"현재 굵기: {self.current_line_width}", font=("Arial", 12))
         self.width_label.pack(pady=(0, 5))
         
-        # 💡 [버그 수정 2] 오류 많던 슬라이더를 확실한 버튼식으로 교체
         width_btn_frame = ctk.CTkFrame(palette_frame, fg_color="transparent")
         width_btn_frame.pack(pady=5)
         
@@ -891,14 +955,13 @@ class ImageEditorWindow(ctk.CTkToplevel):
         y = int((screen_height / 2) - (height / 2))
         self.geometry(f"{width}x{height}+{x}+{y}")
 
-    # 💡 [좀비 창 완벽 퇴치 로직]
     def close_window(self):
         try:
-            self.grab_release() # 다른 창 못 누르게 꽉 잡고 있던 권한 해제
+            self.grab_release() 
         except Exception:
             pass
-        self.withdraw() # 화면에서 먼저 즉시 숨김 처리!
-        self.after(10, self.destroy) # 0.01초 뒤에 메모리에서 안전하게 파괴
+        self.withdraw() 
+        self.after(10, self.destroy) 
 
     def change_pen_color(self, color_code): 
         self.color_btns[self.current_pen_color].configure(border_width=0)
@@ -965,14 +1028,14 @@ class ImageEditorWindow(ctk.CTkToplevel):
                     width=scaled_width
                 )
                 
-            edited_filename = f"edited_slot{self.slot_num}_{datetime.now().strftime('%H%M%S')}.png"
+            edited_filename = f"edited_img_{datetime.now().strftime('%H%M%S')}.png"
             final_img.save(edited_filename)
             
-            self.record_dict['ATTACHED_IMAGES'][self.slot_num] = os.path.abspath(edited_filename)
-            self.lbl_path.configure(text=f"🖍️ [편집됨] {edited_filename}", text_color="#00FFCC")
+            # 💡 [업데이트] 외부에서 넘겨준 저장 함수 실행 (현장 사진이든 BI 캡처든 대응)
+            self.on_save_callback(os.path.abspath(edited_filename))
             
             messagebox.showinfo("편집 완료", "사진에 강조 표시가 적용되었습니다!")
-            self.close_window() # 여기서도 안전 종료 로직으로 처리
+            self.close_window() 
         except Exception as e: 
             messagebox.showerror("저장 실패", f"사진을 저장할 수 없습니다.\n{e}")
 
