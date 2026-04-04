@@ -138,34 +138,29 @@ class ICQA_AutoReportApp(ctk.CTk):
             img.save(ARROW_ICON_PATH)
 
     def clean_text(self, text):
-        if pd.isna(text): 
-            return ""
+        if pd.isna(text): return ""
         cleaned = str(text).strip()
         if cleaned.endswith('.0'):
             cleaned = cleaned[:-2]
         return cleaned
 
     def clean_barcode(self, val):
-        if pd.isna(val): 
-            return ""
+        if pd.isna(val): return ""
         b = str(val).strip().upper()
         if b.endswith('.0'): 
             b = b[:-2]
         return b
 
     def get_text_width(self, font, text):
-        try: 
-            return font.getlength(text)
+        try: return font.getlength(text)
         except Exception:
-            try: 
-                return font.getsize(text)[0]
+            try: return font.getsize(text)[0]
             except Exception: 
                 bbox = font.getbbox(text)
                 return bbox[2] if bbox else len(text)*7
 
     def force_pixel_wrap(self, text, font, max_width):
-        if not text: 
-            return ""
+        if not text: return ""
         text = str(text).replace('\r', '')
         text = re.sub(r'\n+', '\n', text).strip()
         
@@ -183,16 +178,13 @@ class ICQA_AutoReportApp(ctk.CTk):
                     else:
                         char_line = ""
                         for char in word:
-                            if self.get_text_width(font, char_line + char) < max_width: 
-                                char_line += char
+                            if self.get_text_width(font, char_line + char) < max_width: char_line += char
                             else: 
                                 final_lines.append(char_line)
                                 char_line = char
                         current_line = char_line
-                else: 
-                    current_line = test_line
-            if current_line: 
-                final_lines.append(current_line)
+                else: current_line = test_line
+            if current_line: final_lines.append(current_line)
         return "\n".join(final_lines)
 
     def load_raw_data(self):
@@ -243,8 +235,7 @@ class ICQA_AutoReportApp(ctk.CTk):
                 
             req_raw = ['RESOLVETYPE', barcode_col, 'PROBLEM_QTY', 'MOVED_QTY', 'DESCRIPTION', 'REPORT_DATE']
             self.has_external_id = 'EXTERNALID' in df_raw.columns
-            if self.has_external_id and 'EXTERNALID' not in req_raw: 
-                req_raw.append('EXTERNALID')
+            if self.has_external_id and 'EXTERNALID' not in req_raw: req_raw.append('EXTERNALID')
                 
             for col in req_raw:
                 if col not in df_raw.columns: 
@@ -252,8 +243,7 @@ class ICQA_AutoReportApp(ctk.CTk):
                     return
                     
             df_raw[barcode_col] = df_raw[barcode_col].apply(self.clean_barcode)
-            if self.has_external_id: 
-                df_raw['EXTERNALID'] = df_raw['EXTERNALID'].astype(str)
+            if self.has_external_id: df_raw['EXTERNALID'] = df_raw['EXTERNALID'].astype(str)
                 
             df_raw['REPORT_DATE'] = pd.to_datetime(df_raw['REPORT_DATE'], errors='coerce').dt.strftime('%Y-%m-%d')
             self.df_raw_sess = df_raw[df_raw['REPORT_DATE'] == target_date]
@@ -263,8 +253,7 @@ class ICQA_AutoReportApp(ctk.CTk):
                 return
                 
             agg_dict = {'PROBLEM_QTY': 'sum', 'MOVED_QTY': 'sum', barcode_col: 'count', 'DESCRIPTION': 'first'}
-            if self.has_external_id: 
-                agg_dict['EXTERNALID'] = 'first'
+            if self.has_external_id: agg_dict['EXTERNALID'] = 'first'
                 
             self.df_grouped_sess = self.df_raw_sess.groupby(['RESOLVETYPE', barcode_col, 'REPORT_DATE']).agg(agg_dict).rename(columns={barcode_col: 'COUNT'}).reset_index()
 
@@ -278,8 +267,7 @@ class ICQA_AutoReportApp(ctk.CTk):
                     temp_df = pd.read_excel(xls, sheet_name=sheet_name)
                     clean_cols = temp_df.columns.astype(str).str.strip().str.replace('\n', '').str.replace(' ', '')
                     temp_df.columns = clean_cols 
-                    if all(col in clean_cols for col in req_dive): 
-                        valid_dfs.append(temp_df)
+                    if all(col in clean_cols for col in req_dive): valid_dfs.append(temp_df)
                         
                 if not valid_dfs: 
                     messagebox.showerror("오류", f"필수 열({req_dive})을 찾을 수 없습니다!")
@@ -310,13 +298,10 @@ class ICQA_AutoReportApp(ctk.CTk):
         for r_type in resolve_types:
             type_df = self.df_grouped_sess[self.df_grouped_sess['RESOLVETYPE'] == r_type].copy()
             
-            if self.report_range.get() == "top5": 
-                target_df = type_df.sort_values(by=['PROBLEM_QTY', 'MOVED_QTY'], ascending=[False, False]).head(5)
-            else: 
-                target_df = type_df.sort_values(by=['PROBLEM_QTY', 'MOVED_QTY'], ascending=[False, False])
+            if self.report_range.get() == "top5": target_df = type_df.sort_values(by=['PROBLEM_QTY', 'MOVED_QTY'], ascending=[False, False]).head(5)
+            else: target_df = type_df.sort_values(by=['PROBLEM_QTY', 'MOVED_QTY'], ascending=[False, False])
                 
             self.barcode_candidates[r_type] = target_df[self.barcode_col_name].tolist()
-            
             merged = pd.merge(target_df, self.df_dive_sess, left_on=[self.barcode_col_name, 'REPORT_DATE'], right_on=['상품바코드', dive_date_col], how='left')
             
             for index, row in merged.iterrows(): 
@@ -333,12 +318,10 @@ class ICQA_AutoReportApp(ctk.CTk):
         self.result_box.delete("1.0", tk.END)
         mode = self.barcode_mode.get()
         
-        if initial_load:
-            self.selected_barcodes_dict.clear()
+        if initial_load: self.selected_barcodes_dict.clear()
             
         for r_type, barcodes in self.barcode_candidates.items():
-            if not barcodes: 
-                continue
+            if not barcodes: continue
             
             if initial_load:
                 selected_barcode = barcodes[0] if mode == "top1" else random.choice(barcodes) 
@@ -356,7 +339,8 @@ class ICQA_AutoReportApp(ctk.CTk):
         self.sel_win = ctk.CTkToplevel(self)
         self.sel_win.title("Defect Type 및 사유 입력/사진 관리 (결재)")
         self.center_window(self.sel_win, 950, 750)
-        self.sel_win.attributes("-topmost", True)
+        # 💡 [버그 수정 1] 캡처 도구를 가리지 않도록 항상 위에 속성 제거!
+        # self.sel_win.attributes("-topmost", True)  <-- 제거됨
         self.sel_win.focus_force()
         self.sel_win.grab_set() 
         
@@ -451,8 +435,7 @@ class ICQA_AutoReportApp(ctk.CTk):
         new_raw_df['RESOLVETYPE'] = resolve_type_of_old 
 
         agg_dict = {'PROBLEM_QTY': 'sum', 'MOVED_QTY': 'sum', self.barcode_col_name: 'count', 'DESCRIPTION': 'first'}
-        if self.has_external_id: 
-            agg_dict['EXTERNALID'] = 'first'
+        if self.has_external_id: agg_dict['EXTERNALID'] = 'first'
 
         new_grouped_row = new_raw_df.groupby(['RESOLVETYPE', self.barcode_col_name, 'REPORT_DATE']).agg(agg_dict).rename(columns={self.barcode_col_name: 'COUNT'}).reset_index()
 
@@ -467,8 +450,10 @@ class ICQA_AutoReportApp(ctk.CTk):
     def open_image_manager(self, record_dict):
         manager_win = ctk.CTkToplevel(self.sel_win)
         manager_win.title(f"No.{record_dict['GLOBAL_RANK']} 바코드: {record_dict[self.barcode_col_name]} 현장 사진 관리")
-        self.center_window(manager_win, 700, 500)
-        manager_win.attributes("-topmost", True)
+        
+        # 💡 [버그 수정 2] 창 폭을 800으로 늘리고 항상 위 속성 제거!
+        self.center_window(manager_win, 800, 500)
+        # manager_win.attributes("-topmost", True) <-- 제거됨 (캡처 도구 충돌 방지)
         manager_win.focus_force()
         manager_win.grab_set()
         
@@ -483,7 +468,6 @@ class ICQA_AutoReportApp(ctk.CTk):
                 lbl_path.configure(text=os.path.basename(file_path), text_color="white")
                 btn_edit.configure(state="normal")
                 
-        # 💡 [버그 수정] 편집기 호출 시 권한 문제 회피 및 UI 즉각 반영 구조로 변경
         def open_editor(slot_num, lbl_path):
             img_path = record_dict['ATTACHED_IMAGES'][slot_num]
             if img_path: 
@@ -493,18 +477,29 @@ class ICQA_AutoReportApp(ctk.CTk):
             slot_frame = ctk.CTkFrame(slots_frame, fg_color="transparent")
             slot_frame.pack(fill="x", pady=10, padx=10)
             
-            ctk.CTkLabel(slot_frame, text=name, font=("Arial", 13, "bold"), width=250, anchor="w").pack(side="left", padx=10)
+            # 왼쪽: 항목 이름
+            ctk.CTkLabel(slot_frame, text=name, font=("Arial", 13, "bold"), width=220, anchor="w").pack(side="left", padx=10)
             
-            current_path = record_dict['ATTACHED_IMAGES'][slot_num]
-            lbl_path = ctk.CTkLabel(slot_frame, text=os.path.basename(current_path) if current_path else "사진 없음", text_color="gray", width=250, anchor="w")
-            lbl_path.pack(side="left", padx=10)
-            
+            # 💡 [버그 수정 3] 버튼 레이아웃 로직 완벽 개편! (절대 화면 밖으로 밀리지 않게 우측 고정)
             btn_f = ctk.CTkFrame(slot_frame, fg_color="transparent")
             btn_f.pack(side="right", padx=10)
             
-            btn_edit = ctk.CTkButton(btn_f, text="🖍️ 편집/강조", width=80, fg_color="#2B547E", hover_color="#224263", state="normal" if current_path else "disabled", command=lambda s=slot_num, l=lbl_path: open_editor(s, l))
-            ctk.CTkButton(btn_f, text="파일 찾기", width=80, command=lambda s=slot_num, l=lbl_path, b=btn_edit: find_file(s, l, b)).pack(side="left", padx=3)
-            btn_edit.pack(side="left", padx=3)
+            current_path = record_dict['ATTACHED_IMAGES'][slot_num]
+            lbl_path = ctk.CTkLabel(slot_frame, text=os.path.basename(current_path) if current_path else "사진 없음", text_color="gray", anchor="w")
+            
+            # 버튼 2개 생성 (오른쪽 프레임 안에 배치)
+            btn_edit = ctk.CTkButton(btn_f, text="🖍️ 편집/강조", width=90, fg_color="#2B547E", hover_color="#224263", state="normal" if current_path else "disabled")
+            btn_find = ctk.CTkButton(btn_f, text="📁 파일 찾기", width=90)
+            
+            btn_edit.configure(command=lambda s=slot_num, l=lbl_path: open_editor(s, l))
+            btn_find.configure(command=lambda s=slot_num, l=lbl_path, b=btn_edit: find_file(s, l, b))
+            
+            # 우측부터 차례대로 정렬
+            btn_edit.pack(side="right", padx=3)
+            btn_find.pack(side="right", padx=3)
+            
+            # 가운데: 사진 경로 텍스트 (남는 공간을 모두 차지하도록 expand=True)
+            lbl_path.pack(side="left", fill="x", expand=True, padx=10)
             
         ctk.CTkButton(manager_win, text="사진 저장 및 닫기", height=40, font=("Arial", 14, "bold"), fg_color="green", command=manager_win.destroy).pack(pady=20)
 
@@ -586,10 +581,8 @@ class ICQA_AutoReportApp(ctk.CTk):
             
             for name, w in cols:
                 draw.rectangle([x_off, y_off, x_off+w, y_off + 40], outline=color_border)
-                try: 
-                    text_w = self.get_text_width(font_header, name)
-                except Exception: 
-                    text_w = len(name) * 8
+                try: text_w = self.get_text_width(font_header, name)
+                except Exception: text_w = len(name) * 8
                 draw.text((x_off + (w - text_w) / 2, y_off + 11), name, font=font_header, fill=color_white)
                 x_off += w
                 
@@ -600,18 +593,14 @@ class ICQA_AutoReportApp(ctk.CTk):
                 x_off = 0
                 for j, (val, w) in enumerate(zip(wrapped_vals, [cw for _, cw in cols])):
                     draw.rectangle([x_off, y_off, x_off+w, y_off + current_rh], fill=bg_color, outline=color_border)
-                    try: 
-                        text_h = len(val.split('\n')) * 16
-                    except Exception: 
-                        text_h = 16
+                    try: text_h = len(val.split('\n')) * 16
+                    except Exception: text_h = 16
                     center_y = y_off + (current_rh - text_h) / 2 - 2
                     if j in [2, 8]: 
                         draw.text((x_off + 10, center_y), val, font=font_row, fill='black', spacing=6, align='left') 
                     else:
-                        try: 
-                            text_w = max([self.get_text_width(font_row, line) for line in val.split('\n')])
-                        except Exception: 
-                            text_w = len(val) * 7
+                        try: text_w = max([self.get_text_width(font_row, line) for line in val.split('\n')])
+                        except Exception: text_w = len(val) * 7
                         draw.text((x_off + (w - text_w) / 2, center_y), val, font=font_row, fill='black', spacing=6, align='center') 
                     x_off += w
                 y_off += current_rh
@@ -619,10 +608,8 @@ class ICQA_AutoReportApp(ctk.CTk):
             report_segments.append(img_table)
             report_segments.append(Image.new('RGB', (table_width, 20), color_white))
 
-        try: 
-            img_arrow_raw = Image.open(ARROW_ICON_PATH)
-        except Exception: 
-            img_arrow_raw = None
+        try: img_arrow_raw = Image.open(ARROW_ICON_PATH)
+        except Exception: img_arrow_raw = None
             
         photo_title_img = Image.new('RGB', (table_width, 60), color_white)
         ImageDraw.Draw(photo_title_img).text((15, 20), "📸 현장 조치 확인 (각 항목별 대표 SKU)", font=font_title, fill=color_navy)
@@ -653,10 +640,8 @@ class ICQA_AutoReportApp(ctk.CTk):
                 img_area_y_start = title_h + 10
                 current_x = 40
                 
-                # 💡 [버그 수정 1] 첫 번째 사진 폭을 강제 제한하여 화살표 안 덮게 만들기
                 if valid_images.get("1"):
                     with Image.open(valid_images.get("1")) as loc_img_raw:
-                        # 썸네일 방식으로 비율 유지하되 전체 표 너비의 35% 절대 넘지 않게 제한
                         max_first_photo_width = int(table_width * 0.35)
                         loc_img_raw.thumbnail((max_first_photo_width, 300), Image.Resampling.LANCZOS)
                         
@@ -667,10 +652,8 @@ class ICQA_AutoReportApp(ctk.CTk):
                     draw_b.text((100, img_area_y_start + 100), "[1번: 로케이션 사진 없음]", font=font_header, fill='gray')
                     current_x = 300 + 30
                     
-                # 💡 [버그 수정 2] 화살표가 투명도를 가지게 마스크 처리!
                 if img_arrow_raw: 
                     arrow_resized = img_arrow_raw.resize((int(img_arrow_raw.width * (40 / img_arrow_raw.height)), 40), Image.Resampling.LANCZOS)
-                    # mask 속성에 arrow_resized를 줘서 배경 투명하게 그리기
                     block_img.paste(arrow_resized, (current_x, img_area_y_start + 130), mask=arrow_resized)
                     current_x += arrow_resized.width + 30 
                     
@@ -680,11 +663,8 @@ class ICQA_AutoReportApp(ctk.CTk):
                     per_img_w = int((avail_width - (len(conf_images_paths)-1)*10) / len(conf_images_paths))
                     for idx, c_path in enumerate(conf_images_paths):
                         with Image.open(c_path) as c_img_raw:
-                            # 나머지 사진들도 비율 안 깨지게 썸네일 방식으로 붙임
                             c_img_raw.thumbnail((per_img_w, 300), Image.Resampling.LANCZOS)
-                            
                             paste_x = current_x + idx*(per_img_w + 10)
-                            # 중앙 정렬
                             offset_x = paste_x + (per_img_w - c_img_raw.width) // 2
                             
                             draw_b.text((offset_x, img_area_y_start - 18), f"확인{idx+1}", font=font_row, fill='gray')
@@ -711,12 +691,10 @@ class ICQA_AutoReportApp(ctk.CTk):
 
     def load_coords(self):
         if os.path.exists(COORD_FILE):
-            with open(COORD_FILE, "r") as f: 
-                self.coords = json.load(f)
+            with open(COORD_FILE, "r") as f: self.coords = json.load(f)
 
     def save_coords(self):
-        with open(COORD_FILE, "w") as f: 
-            json.dump(self.coords, f)
+        with open(COORD_FILE, "w") as f: json.dump(self.coords, f)
 
     def delete_coord(self, num): 
         self.coords[num] = None
@@ -730,10 +708,8 @@ class ICQA_AutoReportApp(ctk.CTk):
         self.snip_window.attributes('-alpha', 0.3)
         self.snip_window.overrideredirect(True) 
         self.snip_window.config(cursor="cross")
-        try: 
-            self.snip_window.geometry(f"{self.winfo_screenwidth()}x{self.winfo_screenheight()}+0+0")
-        except Exception: 
-            self.snip_window.attributes('-fullscreen', True)
+        try: self.snip_window.geometry(f"{self.winfo_screenwidth()}x{self.winfo_screenheight()}+0+0")
+        except Exception: self.snip_window.attributes('-fullscreen', True)
             
         self.snip_window.bind("<ButtonPress-1>", self.on_press)
         self.snip_window.bind("<B1-Motion>", self.on_drag)
@@ -826,7 +802,6 @@ class ImageEditorWindow(ctk.CTkToplevel):
         self.current_pen_color = "#FF0000"
         self.coords = []
         
-        # 💡 객체 연결 정보 저장 (저장 시 UI 갱신을 위해)
         self.record_dict = record_dict
         self.slot_num = slot_num
         self.lbl_path = lbl_path
@@ -847,7 +822,8 @@ class ImageEditorWindow(ctk.CTkToplevel):
         self.photo_img = ImageTk.PhotoImage(self.display_pil_img)
         
         self.center_window(final_w + 150, final_h + 100)
-        self.attributes("-topmost", True)
+        # 💡 [버그 수정 4] 편집기 창도 항상 위에 속성 제거! 캡처 도구 방해 금지!
+        # self.attributes("-topmost", True) <-- 제거됨
         self.focus_force()
         self.grab_set()
         
@@ -935,11 +911,9 @@ class ImageEditorWindow(ctk.CTkToplevel):
             for coord in self.coords: 
                 draw.rounded_rectangle(coord['bbox'], radius=int(line_w * 4), outline=coord['color'], width=line_w)
                 
-            # 💡 [버그 수정 3] 원본에 덮어쓰지 않고 새로운 이름으로 저장! (권한 에러 방지)
             edited_filename = f"edited_slot{self.slot_num}_{datetime.now().strftime('%H%M%S')}.png"
             final_img.save(edited_filename)
             
-            # 딕셔너리 경로 업데이트 및 UI 텍스트 초록색으로 변경
             self.record_dict['ATTACHED_IMAGES'][self.slot_num] = os.path.abspath(edited_filename)
             self.lbl_path.configure(text=f"🖍️ [편집됨] {edited_filename}", text_color="#00FFCC")
             
