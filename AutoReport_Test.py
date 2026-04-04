@@ -24,8 +24,8 @@ ctk.set_default_color_theme("blue")
 
 COORD_FILE = "capture_coords.json"
 # ⚠️ 필수 외부 파일 정의
-FONT_PATH = "font.ttf" # 나눔고딕, 맑은고딕 등 한글 폰트 파일 (깃허브에 함께 업로드 필수!)
-ARROW_ICON_PATH = "arrow_icon.png" # 프로그램이 스스로 생성할 화살표 아이콘 이름
+FONT_PATH = "font.ttf" 
+ARROW_ICON_PATH = "arrow_icon.png" 
 
 class ICQA_AutoReportApp(ctk.CTk):
     def __init__(self):
@@ -83,7 +83,8 @@ class ICQA_AutoReportApp(ctk.CTk):
         ctk.CTkRadioButton(frame_barcode_opt, text="1위 바코드", variable=self.barcode_mode, value="top1", command=self.update_barcode_text).pack(side="left", padx=(10, 5))
         ctk.CTkRadioButton(frame_barcode_opt, text="🎲랜덤 바코드", variable=self.barcode_mode, value="random", command=self.update_barcode_text).pack(side="left", padx=5)
 
-        self.btn_run = ctk.CTkButton(frame_excel, text="🚀 VLOOKUP 병합 및 Defect Type 선택", fg_color="green", hover_color="darkgreen", height=45, command=self.process_data)
+        # 💡 [룩희 피드백 반영 2] 버튼 이름 변경! (VLOOKUP -> Data 병합)
+        self.btn_run = ctk.CTkButton(frame_excel, text="🚀 Data 병합 및 Defect Type 선택", fg_color="green", hover_color="darkgreen", height=45, command=self.process_data)
         self.btn_run.pack(pady=15, padx=20, fill="x")
 
         self.result_box = ctk.CTkTextbox(frame_excel, height=80, font=("Arial", 14))
@@ -425,7 +426,15 @@ class ICQA_AutoReportApp(ctk.CTk):
         manager_win.slot_images = {} 
 
         def find_file(slot_num, lbl_path):
-            file_path = filedialog.askopenfilename(filetypes=[("Image files", "*.jpg *.jpeg *.png")])
+            # 💡 [룩희 피드백 반영 1] 파일 선택 창이 열리기 직전에 VIP 권한(최상단 고정)을 잠시 끕니다!
+            manager_win.attributes("-topmost", False)
+            
+            # parent=manager_win 을 주어 탐색기가 사진 창 바로 위에 뜨게 합니다.
+            file_path = filedialog.askopenfilename(parent=manager_win, filetypes=[("Image files", "*.jpg *.jpeg *.png")])
+            
+            # 선택이 끝났으면 팝업창의 VIP 권한을 다시 복구합니다.
+            manager_win.attributes("-topmost", True)
+
             if file_path:
                 record_dict['ATTACHED_IMAGES'][slot_num] = file_path
                 filename = os.path.basename(file_path)
@@ -549,8 +558,9 @@ class ICQA_AutoReportApp(ctk.CTk):
                 draw.rectangle([x_off, y_off, x_off+w, y_off + header_height], outline=color_border)
                 
                 try:
-                    text_w = self.get_text_width(font_header, name)
-                    text_h = 14
+                    text_bbox = font_header.getbbox(name)
+                    text_w = text_bbox[2] - text_bbox[0]
+                    text_h = text_bbox[3] - text_bbox[1]
                 except:
                     text_w = len(name) * 8 
                     text_h = 14
