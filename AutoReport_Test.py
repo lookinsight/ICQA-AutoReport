@@ -468,6 +468,9 @@ class ICQA_AutoReportApp(ctk.CTk):
         ctk.CTkButton(manager_win, text="사진 저장 및 닫기", height=40, font=("Arial", 14, "bold"), fg_color="green", command=manager_win.destroy).pack(pady=20)
 
     def generate_final_tables(self):
+        # 💡 [버그 수정] 파일 이름에 쓸 날짜 데이터를 UI에서 다시 불러옵니다!
+        target_date = self.date_combo.get()
+        
         updated_report_list = []
         for index, (row_dict, combo, entry, r_type) in enumerate(self.entries_data):
             row_dict['DEFECT_TYPE'] = combo.get()
