@@ -361,7 +361,7 @@ class ICQA_AutoReportApp(ctk.CTk):
             clean_b = self.clean_barcode(selected_barcode)
             self.result_box.insert(tk.END, f"[{r_type}] 검색 바코드: {clean_b}\n")
 
-    def open_defect_selector(self):
+  def open_defect_selector(self):
         self.sel_win = ctk.CTkToplevel(self)
         self.sel_win.title("Defect Type 및 사유 입력/사진 관리 (결재)")
         self.center_window(self.sel_win, 950, 700) 
@@ -378,6 +378,9 @@ class ICQA_AutoReportApp(ctk.CTk):
         for i, row in enumerate(self.final_report_data):
             row_dict = row.to_dict()
             row_dict['ATTACHED_IMAGES'] = {"1": None, "2": None, "3": None, "4": None} 
+            
+            # 💡 [버그 수정] 사진 팝업창이 뻗지 않도록, 창 제목에 쓸 순번(RANK)을 여기서 미리 부여합니다!
+            row_dict['RANK'] = i + 1 
 
             row_frame = ctk.CTkFrame(scroll_frame)
             row_frame.pack(fill="x", pady=8, padx=5)
