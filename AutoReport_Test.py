@@ -425,7 +425,7 @@ class ICQA_AutoReportApp(ctk.CTk):
             return
 
         old_b = self.clean_barcode(old_b_input)
-        new_b = self.clean barcode(new_b_input)
+        new_b = self.clean_barcode(new_b_input)
 
         mask_old = (self.df_grouped_sess[self.barcode_col_name] == old_b)
         if not self.df_grouped_sess[mask_old].any().any():
