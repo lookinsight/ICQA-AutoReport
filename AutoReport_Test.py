@@ -697,18 +697,18 @@ class ICQA_AutoReportApp(ctk.CTk):
         ImageDraw.Draw(photo_title_img).text((15, 20), "📸 현장 조치 확인 (각 항목별 대표 SKU)", font=font_title, fill=color_navy)
         report_segments.append(photo_title_img)
         
-        # 💡 [업데이트] DEFECT_TYPE에 따라 단색 화살표를 즉석에서 그려주는 엔진 추가!
+        # DEFECT_TYPE에 따른 단색 화살표 생성기
         def create_dynamic_arrow(color_hex):
-            arr_img = Image.new("RGBA", (100, 40), (255, 255, 255, 0)) # 배경 투명하게
+            arr_img = Image.new("RGBA", (100, 40), (255, 255, 255, 0)) 
             draw_arr = ImageDraw.Draw(arr_img)
-            draw_arr.rectangle([0, 10, 70, 30], fill=color_hex) # 화살표 몸통 (직사각형)
-            draw_arr.polygon([(70, 0), (100, 20), (70, 40)], fill=color_hex) # 화살표 머리 (삼각형)
+            draw_arr.rectangle([0, 10, 70, 30], fill=color_hex) 
+            draw_arr.polygon([(70, 0), (100, 20), (70, 40)], fill=color_hex) 
             return arr_img
 
         color_map = {
-            "Found": "#FFB300",       # 🌟 긍정적인 골드
-            "Loss": "#212121",        # ⬛ 다크 챠콜(검정)
-            "DAMAGED_SKU": "#9E9E9E"  # 🌫️ 시그니처 그레이
+            "Found": "#FFB300",       
+            "Loss": "#212121",        
+            "DAMAGED_SKU": "#9E9E9E"  
         }
 
         photo_blocks = [] 
@@ -759,29 +759,34 @@ class ICQA_AutoReportApp(ctk.CTk):
                 img_area_y_start = title_h + 10
                 current_x = inner_start_x
                 
-                # 1번 사진
+                # 💡 [업데이트] 1번 메인 사진 수직 중앙 정렬
                 if valid_images.get("1"):
                     with Image.open(valid_images.get("1")) as loc_img_raw:
                         max_first_photo_width = int(block_w * 0.35)
                         loc_img_raw.thumbnail((max_first_photo_width, img_area_height - 40), Image.Resampling.LANCZOS)
                         img_loc_final = loc_img_raw
-                        block_img.paste(img_loc_final, (current_x, img_area_y_start))
+                        
+                        center_y_main = img_area_y_start + (img_area_height - img_loc_final.height) // 2
+                        block_img.paste(img_loc_final, (current_x, center_y_main))
                         current_x += img_loc_final.width + pad_x 
                 else: 
-                    draw_b.text((current_x, img_area_y_start + (img_area_height//3)), "[사진 없음]", font=font_header, fill='gray')
+                    center_y_no_img = img_area_y_start + (img_area_height // 2) - 10
+                    draw_b.text((current_x, center_y_no_img), "[사진 없음]", font=font_header, fill='gray')
                     current_x += int(block_w * 0.35) + pad_x
                     
-                # 💡 [업데이트] 여기서 화살표를 즉석으로 만들어서 붙여줍니다!
+                # 💡 [업데이트] 화살표 수직 중앙 정렬
                 defect_val = self.clean_text(row.get('DEFECT_TYPE', 'Found'))
-                arrow_color = color_map.get(defect_val, "#FFB300") # 매칭 안 되면 기본 골드
+                arrow_color = color_map.get(defect_val, "#FFB300")
                 img_arrow_raw = create_dynamic_arrow(arrow_color)
                 
                 arr_h = 40 if layout_mode == "1col" else (25 if layout_mode == "2col" else 15)
                 arrow_resized = img_arrow_raw.resize((int(img_arrow_raw.width * (arr_h / img_arrow_raw.height)), arr_h), Image.Resampling.LANCZOS)
-                block_img.paste(arrow_resized, (current_x, img_area_y_start + (img_area_height // 2) - 20), mask=arrow_resized)
+                
+                center_y_arrow = img_area_y_start + (img_area_height - arrow_resized.height) // 2
+                block_img.paste(arrow_resized, (current_x, center_y_arrow), mask=arrow_resized)
                 current_x += arrow_resized.width + pad_x 
                     
-                # 2~4번 사진
+                # 💡 [업데이트] 2~4번 서브 사진 수직 중앙 정렬
                 conf_images_paths = [v for k, v in valid_images.items() if k in ["2", "3", "4"]]
                 if conf_images_paths:
                     avail_width = block_w - current_x - pad_x
@@ -793,15 +798,19 @@ class ICQA_AutoReportApp(ctk.CTk):
                                 paste_x = current_x + idx*(per_img_w + 10)
                                 offset_x = paste_x + max(0, (per_img_w - c_img_raw.width) // 2)
                                 font_size_conf = font_row if layout_mode != "3col" else ImageFont.truetype(FONT_PATH, 11)
-                                draw_b.text((offset_x, img_area_y_start - 18), f"확인{idx+1}", font=font_size_conf, fill='gray')
-                                block_img.paste(c_img_raw, (offset_x, img_area_y_start))
+                                
+                                center_y_sub = img_area_y_start + (img_area_height - c_img_raw.height) // 2
+                                draw_b.text((offset_x, center_y_sub - 18), f"확인{idx+1}", font=font_size_conf, fill='gray')
+                                block_img.paste(c_img_raw, (offset_x, center_y_sub))
                 else: 
-                    draw_b.text((current_x + 5, img_area_y_start + (img_area_height//3)), "[조치 사진 없음]", font=font_row, fill='gray')
+                    center_y_no_sub = img_area_y_start + (img_area_height // 2) - 10
+                    draw_b.text((current_x + 5, center_y_no_sub), "[조치 사진 없음]", font=font_row, fill='gray')
                     
-                # 사유 텍스트
+                # 사유 박스 그리기
                 사유_y = title_h + img_area_height + 10
-                text_w = self.get_text_width(font_row, deep_text_wrap.split('\n')[0])
+                text_w = self.get_text_width(font_row, deep_text_wrap.split('\n')[0]) if deep_text_wrap else 0
                 center_position_x = (block_w - text_w) / 2 if text_w < block_w - (pad_x*2) else pad_x
+                
                 box_x_start = pad_x
                 box_x_end = block_w - pad_x
                 draw_b.rectangle([box_x_start, 사유_y, box_x_end, 사유_y + 사유_h - 10], fill='#F7F9FC', outline='#D0D7DE')
@@ -809,7 +818,7 @@ class ICQA_AutoReportApp(ctk.CTk):
                 
                 photo_blocks.append(block_img)
 
-        # 💡 블록들 레이아웃 병합
+        # 블록 병합
         if layout_mode == "1col":
             for blk in photo_blocks:
                 report_segments.append(blk)
