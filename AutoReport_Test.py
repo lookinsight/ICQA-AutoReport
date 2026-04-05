@@ -319,7 +319,7 @@ class ICQA_AutoReportApp(ctk.CTk):
                 row_dict['RANK'] = index + 1 
                 row_dict['GLOBAL_RANK'] = global_rank
                 
-                # 💡 [버그 수정] 화살표 색상을 위한 콤보박스 기본값은 무조건 "Found"로 고정!
+                # 콤보박스 기본값 "Found" 고정 유지
                 row_dict['DEFECT_TYPE'] = "Found" 
                 
                 reason_from_excel = self.clean_text(row_dict.get('사유', ''))
@@ -747,8 +747,14 @@ class ICQA_AutoReportApp(ctk.CTk):
                 block_title_wrap = self.force_pixel_wrap(f"No.{row['GLOBAL_RANK']} 바코드: {b_code} [{r_type}]", font_header, block_w - (pad_x*2))
                 deep_text_wrap = self.force_pixel_wrap(self.clean_text(row.get('FINAL_DIVE_DEEP','')), font_row, block_w - (pad_x*2) - 30)
                 
-                title_h = (block_title_wrap.count('\n') + 1) * 20 + 20
-                사유_h = (deep_text_wrap.count('\n') + 1) * 20 + 30
+                # 💡 [최종 수정 사항: 최소 높이(Min-Height) 개념 적용]
+                title_h = 60  
+                
+                # 글씨 길이에 따른 실제 필요한 높이를 먼저 계산합니다.
+                actual_reason_h = (deep_text_wrap.count('\n') + 1) * 20 + 30
+                
+                # 기본 110px을 유지하되, 글씨가 길어서 110px을 넘어가면 그 길이에 맞춰서 고무줄처럼 늘어납니다!
+                사유_h = max(110, actual_reason_h)
                 
                 block_total_height = title_h + img_area_height + 사유_h + 30 
                 
@@ -820,7 +826,7 @@ class ICQA_AutoReportApp(ctk.CTk):
                 
                 photo_blocks.append(block_img)
 
-        # 블록 병합
+        # 블록 병합 (이전 코드 완벽 유지, 서로 다른 높이라도 max(h1, h2)로 안전하게 병합됨)
         if layout_mode == "1col":
             for blk in photo_blocks:
                 report_segments.append(blk)
