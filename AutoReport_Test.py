@@ -30,7 +30,7 @@ class ICQA_AutoReportApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("AutoReport_Master")
-        self.center_window(self, 600, 800) 
+        self.center_window(self, 650, 850) 
         
         self.raw_filepath = None
         self.dive_filepath = None
@@ -42,8 +42,10 @@ class ICQA_AutoReportApp(ctk.CTk):
         self.barcode_candidates = {} 
         self.selected_barcodes_dict = {} 
         
-        # 💡 [업데이트] BI 캡처 파일들을 번호별로 정확히 관리하기 위한 딕셔너리
+        # 💡 [업데이트] 수정 기능을 위해 원본 배경과 편집 좌표를 따로 저장!
         self.latest_captures = {"1": None, "2": None, "3": None, "4": None, "5": None}
+        self.bg_captures = {"1": None, "2": None, "3": None, "4": None, "5": None}
+        self.bi_edit_coords = {"1": [], "2": [], "3": [], "4": [], "5": []}
 
         if not os.path.exists(FONT_PATH):
             messagebox.showerror("필수 파일 누락", f"프로그램 폴더 안에 '{FONT_PATH}' (한글 폰트) 파일이 반드시 있어야 합니다.\n\n프로그램을 종료합니다.")
@@ -74,7 +76,7 @@ class ICQA_AutoReportApp(ctk.CTk):
 
         self.report_range = ctk.StringVar(value="top5")
         frame_range_opt = ctk.CTkFrame(frame_excel, fg_color="transparent")
-        frame_range_opt.pack(padx=20, pady=(15, 0), fill="x")
+        frame_range_opt.pack(padx=20, pady=(10, 0), fill="x")
         ctk.CTkLabel(frame_range_opt, text="📋 보고 표 범위:", font=("Arial", 12, "bold"), text_color="#00FFCC").pack(side="left")
         ctk.CTkRadioButton(frame_range_opt, text="Top 5 (기본)", variable=self.report_range, value="top5").pack(side="left", padx=(10, 5))
         ctk.CTkRadioButton(frame_range_opt, text="전체 데이터", variable=self.report_range, value="all").pack(side="left", padx=5)
@@ -86,10 +88,10 @@ class ICQA_AutoReportApp(ctk.CTk):
         ctk.CTkRadioButton(frame_barcode_opt, text="1위 바코드", variable=self.barcode_mode, value="top1", command=self.update_barcode_text).pack(side="left", padx=(10, 5))
         ctk.CTkRadioButton(frame_barcode_opt, text="🎲랜덤 바코드", variable=self.barcode_mode, value="random", command=self.update_barcode_text).pack(side="left", padx=5)
 
-        self.btn_run = ctk.CTkButton(frame_excel, text="🚀 Data 병합 및 Defect Type 선택", fg_color="green", hover_color="darkgreen", height=45, command=self.process_data)
-        self.btn_run.pack(pady=15, padx=20, fill="x")
+        self.btn_run = ctk.CTkButton(frame_excel, text="🚀 Data 병합 및 사유/현장사진 입력", fg_color="green", hover_color="darkgreen", height=45, command=self.process_data)
+        self.btn_run.pack(pady=10, padx=20, fill="x")
 
-        self.result_box = ctk.CTkTextbox(frame_excel, height=80, font=("Arial", 14))
+        self.result_box = ctk.CTkTextbox(frame_excel, height=70, font=("Arial", 14))
         self.result_box.pack(padx=20, pady=(5, 10), fill="x")
 
         # ==========================================
@@ -98,10 +100,10 @@ class ICQA_AutoReportApp(ctk.CTk):
         frame_capture = ctk.CTkFrame(self)
         frame_capture.pack(pady=10, padx=20, fill="both", expand=True)
 
-        ctk.CTkLabel(frame_capture, text="[2단계] 파워 BI 대시보드 캡처 (1번:전체 / 2~5번:분할)", font=("Arial", 16, "bold")).pack(pady=(10, 5))
+        ctk.CTkLabel(frame_capture, text="[2단계] 파워 BI 캡처 (1번:전체 / 2~5번:분할)", font=("Arial", 16, "bold")).pack(pady=(10, 5))
         
         self.coord_labels = {}
-        self.btn_edits_bi = {} # 💡 [업데이트] BI 캡처용 편집 버튼들을 담을 딕셔너리
+        self.btn_edits_bi = {} 
         
         for i in range(1, 6):
             row_frame = ctk.CTkFrame(frame_capture, fg_color="transparent")
@@ -110,14 +112,13 @@ class ICQA_AutoReportApp(ctk.CTk):
             btn_snip = ctk.CTkButton(row_frame, text=f"📍 {i}번 지정", width=80, command=lambda num=str(i): self.start_snip(num))
             btn_snip.pack(side="left", padx=5)
             
-            status_text = "✅ 지정됨" if self.coords[str(i)] else "❌ 미지정"
+            status_text = "✅ 캡처완료" if self.latest_captures[str(i)] else ("✅ 지정됨" if self.coords[str(i)] else "❌ 미지정")
             text_color = "white" if self.coords[str(i)] else "gray"
             lbl = ctk.CTkLabel(row_frame, text=status_text, width=80, text_color=text_color)
             lbl.pack(side="left", padx=5)
             self.coord_labels[str(i)] = lbl
             
-            # 💡 [업데이트] BI 캡처 에디터 열기 버튼 추가!
-            btn_edit_bi = ctk.CTkButton(row_frame, text="🖍️ 편집", width=60, fg_color="#2B547E", hover_color="#224263", state="disabled", command=lambda num=str(i): self.open_bi_editor(num))
+            btn_edit_bi = ctk.CTkButton(row_frame, text="🖍️ 에디터", width=70, fg_color="#2B547E", hover_color="#224263", state="disabled", command=lambda num=str(i): self.open_bi_editor(num))
             btn_edit_bi.pack(side="left", padx=5)
             self.btn_edits_bi[str(i)] = btn_edit_bi
             
@@ -125,10 +126,19 @@ class ICQA_AutoReportApp(ctk.CTk):
             btn_del.pack(side="left", padx=5)
 
         remote_btn = ctk.CTkButton(frame_capture, text="🎛️ 항상 위 리모컨 띄우기", fg_color="#E56717", hover_color="#C35613", height=40, command=self.open_remote)
-        remote_btn.pack(pady=15, padx=20, fill="x")
+        remote_btn.pack(pady=10, padx=20, fill="x")
+
+        # ==========================================
+        # 📝 [3단계] 최종 보고서 생성
+        # ==========================================
+        frame_final = ctk.CTkFrame(self, fg_color="transparent")
+        frame_final.pack(pady=5, padx=20, fill="x")
+        
+        self.btn_final_report = ctk.CTkButton(frame_final, text="✨ [3단계] 최종 통합 One-Page 보고서 생성 ✨", height=50, font=("Arial", 16, "bold"), fg_color="#B8860B", hover_color="#8B6508", command=self.generate_final_tables)
+        self.btn_final_report.pack(fill="x")
 
         footer_label = ctk.CTkLabel(self, text="💡 Developed by 룩희 & 재민", font=("Arial", 12, "bold", "italic"), text_color="gray")
-        footer_label.pack(side="bottom", pady=10)
+        footer_label.pack(side="bottom", pady=5)
 
     def center_window(self, target_window, width, height):
         screen_width = target_window.winfo_screenwidth()
@@ -150,15 +160,13 @@ class ICQA_AutoReportApp(ctk.CTk):
     def clean_text(self, text):
         if pd.isna(text): return ""
         cleaned = str(text).strip()
-        if cleaned.endswith('.0'):
-            cleaned = cleaned[:-2]
+        if cleaned.endswith('.0'): cleaned = cleaned[:-2]
         return cleaned
 
     def clean_barcode(self, val):
         if pd.isna(val): return ""
         b = str(val).strip().upper()
-        if b.endswith('.0'): 
-            b = b[:-2]
+        if b.endswith('.0'): b = b[:-2]
         return b
 
     def get_text_width(self, font, text):
@@ -212,8 +220,7 @@ class ICQA_AutoReportApp(ctk.CTk):
                     if dates: 
                         self.date_combo.configure(values=dates)
                         self.date_combo.set(dates[0])
-            except Exception as e: 
-                print(f"날짜 불러오기 실패: {e}")
+            except Exception as e: print(f"날짜 불러오기 실패: {e}")
 
     def load_dive_data(self):
         filepath = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
@@ -226,16 +233,13 @@ class ICQA_AutoReportApp(ctk.CTk):
         if not self.raw_filepath or not self.dive_filepath: 
             messagebox.showwarning("경고", "Raw Data와 Dive-Deep 엑셀 파일을 모두 선택해주세요!")
             return
-            
         target_date = self.date_combo.get()
         if not target_date or target_date == "Raw Data를 먼저 넣어주세요": 
             messagebox.showwarning("경고", "보고 대상 날짜를 선택해주세요!")
             return
 
         try:
-            with open(self.raw_filepath, 'rb') as f: 
-                df_raw = pd.read_excel(f, engine='openpyxl')
-            
+            with open(self.raw_filepath, 'rb') as f: df_raw = pd.read_excel(f, engine='openpyxl')
             df_raw.columns = df_raw.columns.str.strip().str.replace('\n', '')
             barcode_col = 'BARCODE' if 'BARCODE' in df_raw.columns else ('EXTERNALID' if 'EXTERNALID' in df_raw.columns else None)
             
@@ -291,8 +295,6 @@ class ICQA_AutoReportApp(ctk.CTk):
             self.recompute_final_report_list(initial_load=True)
             self.open_defect_selector()
             
-        except PermissionError:
-            messagebox.showerror("권한 에러", "엑셀 파일이 열려있거나 동기화 중입니다!\n열려있는 엑셀을 닫고 다시 시도해주세요.")
         except Exception as e: 
             messagebox.showerror("에러 발생", f"실행 중 문제가 발생했습니다:\n{str(e)}")
 
@@ -316,9 +318,15 @@ class ICQA_AutoReportApp(ctk.CTk):
             
             for index, row in merged.iterrows(): 
                 row_dict = row.to_dict()
-                row_dict['ATTACHED_IMAGES'] = {"1": None, "2": None, "3": None, "4": None}
+                if 'ATTACHED_IMAGES' not in row_dict:
+                    # 💡 무한 수정을 위해 BG(배경 원본)와 COORDS(네모 좌표)를 별도 저장 공간 마련
+                    row_dict['ATTACHED_IMAGES'] = {"1": None, "2": None, "3": None, "4": None}
+                    row_dict['BG_IMAGES'] = {"1": None, "2": None, "3": None, "4": None}
+                    row_dict['EDIT_COORDS'] = {"1": [], "2": [], "3": [], "4": []}
                 row_dict['RANK'] = index + 1 
                 row_dict['GLOBAL_RANK'] = global_rank
+                row_dict['DEFECT_TYPE'] = "Found" 
+                row_dict['FINAL_DIVE_DEEP'] = "" 
                 global_rank += 1
                 self.final_report_data.append(row_dict) 
                 
@@ -332,22 +340,19 @@ class ICQA_AutoReportApp(ctk.CTk):
             
         for r_type, barcodes in self.barcode_candidates.items():
             if not barcodes: continue
-            
             if initial_load:
                 selected_barcode = barcodes[0] if mode == "top1" else random.choice(barcodes) 
-                clean_b = self.clean_barcode(selected_barcode)
-                self.selected_barcodes_dict[r_type] = clean_b 
+                self.selected_barcodes_dict[r_type] = self.clean_barcode(selected_barcode)
             else:
                 if self.selected_barcodes_dict.get(r_type) not in [self.clean_barcode(b) for b in barcodes]:
                     selected_barcode = barcodes[0] if mode == "top1" else random.choice(barcodes) 
                     self.selected_barcodes_dict[r_type] = self.clean_barcode(selected_barcode)
                     
-            current_rep = self.selected_barcodes_dict.get(r_type)
-            self.result_box.insert(tk.END, f"[{r_type}] 대표 바코드: {current_rep}\n")
+            self.result_box.insert(tk.END, f"[{r_type}] 대표 바코드: {self.selected_barcodes_dict.get(r_type)}\n")
 
     def open_defect_selector(self):
         self.sel_win = ctk.CTkToplevel(self)
-        self.sel_win.title("Defect Type 및 사유 입력/사진 관리 (결재)")
+        self.sel_win.title("Defect Type 및 사유 입력/사진 관리")
         self.center_window(self.sel_win, 950, 750)
         self.sel_win.focus_force()
         self.sel_win.grab_set() 
@@ -358,15 +363,11 @@ class ICQA_AutoReportApp(ctk.CTk):
         frame_swap = ctk.CTkFrame(self.sel_win, fg_color="transparent")
         frame_swap.pack(pady=5, padx=20, fill="x")
         ctk.CTkLabel(frame_swap, text="🔄 데이터 교체:", font=("Arial", 12, "bold"), text_color="#FFCC00").pack(side="left", padx=(0, 10))
-        
         entry_old_b = ctk.CTkEntry(frame_swap, placeholder_text="뺄 바코드 (예: 111)", width=130)
         entry_old_b.pack(side="left", padx=5)
-        
         ctk.CTkLabel(frame_swap, text="➡️", font=("Arial", 14, "bold")).pack(side="left")
-        
         entry_new_b = ctk.CTkEntry(frame_swap, placeholder_text="넣을 바코드 (예: 222)", width=130)
         entry_new_b.pack(side="left", padx=5)
-
         btn_swap_exec = ctk.CTkButton(frame_swap, text="🔄 교체 실행", width=100, fg_color="dimgray", hover_color="black", command=lambda: self.execute_barcode_swap(entry_old_b, entry_new_b))
         btn_swap_exec.pack(side="left", padx=10)
 
@@ -380,7 +381,7 @@ class ICQA_AutoReportApp(ctk.CTk):
             b_code = self.clean_text(row_dict[self.barcode_col_name])
             qty = self.clean_text(row_dict['PROBLEM_QTY'])
             r_type = self.clean_text(row_dict['RESOLVETYPE'])
-            dive_val = self.clean_text(row_dict['사유'])
+            dive_val = row_dict.get('FINAL_DIVE_DEEP', self.clean_text(row_dict.get('사유', '')))
             global_rank = row_dict['GLOBAL_RANK']
             
             is_representative = (b_code == self.selected_barcodes_dict.get(r_type))
@@ -395,13 +396,13 @@ class ICQA_AutoReportApp(ctk.CTk):
             ctk.CTkLabel(top_frame, text=f"No.{global_rank} [{r_type}] 바코드: {b_code} | 문제수량: {qty}", font=("Arial", 14, "bold"), text_color="white" if is_representative else "gray").pack(side="left")
             
             if is_representative:
-                btn_manage_photo = ctk.CTkButton(top_frame, text="⭐ 대표 사진 등록", width=120, fg_color="#E56717", hover_color="#C35613", command=lambda r=row_dict: self.open_image_manager(r))
+                btn_manage_photo = ctk.CTkButton(top_frame, text="⭐ 대표 현장사진 등록", width=140, fg_color="#E56717", hover_color="#C35613", command=lambda r=row_dict: self.open_image_manager(r))
                 btn_manage_photo.pack(side="right", padx=5)
             else:
                 ctk.CTkLabel(top_frame, text="[사진 생략]", text_color="gray", font=("Arial", 12, "italic")).pack(side="right", padx=15)
                 
             combo = ctk.CTkComboBox(top_frame, values=["Found", "Loss", "DAMAGED_SKU"], width=130)
-            combo.set("Found")
+            combo.set(row_dict.get('DEFECT_TYPE', 'Found'))
             combo.pack(side="right", padx=(15, 5))
             
             bot_frame = ctk.CTkFrame(row_frame, fg_color="transparent")
@@ -412,9 +413,16 @@ class ICQA_AutoReportApp(ctk.CTk):
             entry.pack(side="left", fill="x", expand=True, padx=(10, 0))
             entry.insert(0, dive_val if dive_val else "사유 미기재")
             
-            self.entries_data.append((row_dict, combo, entry, r_type)) 
+            self.entries_data.append((row_dict, combo, entry)) 
             
-        ctk.CTkButton(self.sel_win, text="✨ 입력 완료 및 최종 보고서 이미지 생성 ✨", height=60, font=("Arial", 16, "bold"), command=self.generate_final_tables).pack(pady=20)
+        ctk.CTkButton(self.sel_win, text="💾 사유 및 현장사진 임시저장", height=50, font=("Arial", 16, "bold"), fg_color="green", command=self.save_temporary_data).pack(pady=15)
+
+    def save_temporary_data(self):
+        for row_dict, combo, entry in self.entries_data:
+            row_dict['DEFECT_TYPE'] = combo.get()
+            row_dict['FINAL_DIVE_DEEP'] = entry.get() 
+        self.sel_win.destroy()
+        messagebox.showinfo("임시 저장 완료", "현장 데이터가 저장되었습니다.\n\n[2단계] 파워 BI 캡처를 진행한 후,\n[3단계]에서 최종 보고서를 생성해주세요!")
 
     def execute_barcode_swap(self, entry_old, entry_new):
         old_b_input = entry_old.get().strip()
@@ -438,7 +446,6 @@ class ICQA_AutoReportApp(ctk.CTk):
             return
 
         resolve_type_of_old = self.df_grouped_sess[mask_old]['RESOLVETYPE'].iloc[0]
-
         new_raw_df = self.df_raw_sess[mask_new_raw]
         new_raw_df['RESOLVETYPE'] = resolve_type_of_old 
 
@@ -455,12 +462,10 @@ class ICQA_AutoReportApp(ctk.CTk):
         self.open_defect_selector() 
         messagebox.showinfo("교체 완료", f"선수 교체가 성공적으로 완료되었습니다!")
 
-    # 💡 [업데이트] 콜백 함수 구조로 개선된 현장 사진 매니저
     def open_image_manager(self, record_dict):
-        manager_win = ctk.CTkToplevel(self.sel_win)
+        manager_win = ctk.CTkToplevel(self)
         manager_win.title(f"No.{record_dict['GLOBAL_RANK']} 바코드: {record_dict[self.barcode_col_name]} 현장 사진 관리")
-        
-        self.center_window(manager_win, 800, 500)
+        self.center_window(manager_win, 850, 550)
         manager_win.focus_force()
         manager_win.grab_set()
         
@@ -468,64 +473,108 @@ class ICQA_AutoReportApp(ctk.CTk):
         slots_frame.pack(pady=20, padx=20, fill="both", expand=True)
         slot_names = {"1": "1번: 문제 로케이션 사진 (강조 추천)", "2": "2번: 확인1 (조치 중/완료)", "3": "3번: 확인2 (선택)", "4": "4번: 확인3 (선택)"}
         
-        def find_file(slot_num, lbl_path, btn_edit):
+        thumb_labels = {}
+
+        def update_thumbnail(path, lbl_thumb):
+            if path and os.path.exists(path):
+                try:
+                    img = Image.open(path).convert('RGB')
+                    img.thumbnail((70, 70), Image.Resampling.LANCZOS)
+                    ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=img.size)
+                    lbl_thumb.configure(image=ctk_img, text="")
+                except Exception:
+                    lbl_thumb.configure(image="", text="미리보기\n오류")
+            else:
+                lbl_thumb.configure(image="", text="사진\n없음")
+
+        def find_file(slot_num, lbl_path, btn_edit, lbl_thumb):
             file_path = filedialog.askopenfilename(parent=manager_win, filetypes=[("Image files", "*.jpg *.jpeg *.png")])
             if file_path: 
+                # 💡 사진 등록 시 원본/압축파일/좌표를 모두 초기화
+                record_dict['BG_IMAGES'][slot_num] = file_path
                 record_dict['ATTACHED_IMAGES'][slot_num] = file_path
+                record_dict['EDIT_COORDS'][slot_num] = []
+                
                 lbl_path.configure(text=os.path.basename(file_path), text_color="white")
                 btn_edit.configure(state="normal")
+                update_thumbnail(file_path, lbl_thumb) 
                 
-        def open_editor(slot_num, lbl_path):
-            img_path = record_dict['ATTACHED_IMAGES'][slot_num]
-            if img_path: 
-                # 에디터가 편집 성공 후 호출할 콜백 함수 정의!
-                def on_save_callback(new_path):
-                    record_dict['ATTACHED_IMAGES'][slot_num] = new_path
-                    lbl_path.configure(text=f"🖍️ [편집됨] {os.path.basename(new_path)}", text_color="#00FFCC")
-                ImageEditorWindow(manager_win, img_path, on_save_callback) 
+        def open_editor(slot_num, lbl_path, lbl_thumb):
+            bg_path = record_dict.get('BG_IMAGES', {}).get(slot_num)
+            
+            # 옛날 버전으로 저장된 데이터 호환성을 위한 방어 코드
+            if not bg_path: 
+                bg_path = record_dict['ATTACHED_IMAGES'][slot_num]
+                record_dict['BG_IMAGES'][slot_num] = bg_path
+                record_dict['EDIT_COORDS'][slot_num] = []
+                
+            if bg_path and os.path.exists(bg_path): 
+                existing_coords = record_dict['EDIT_COORDS'][slot_num]
+                def on_save_callback(new_bg_path, new_final_path, new_coords):
+                    # 💡 무한 수정을 위해 3가지를 전부 저장!
+                    record_dict['BG_IMAGES'][slot_num] = new_bg_path
+                    record_dict['ATTACHED_IMAGES'][slot_num] = new_final_path
+                    record_dict['EDIT_COORDS'][slot_num] = new_coords
+                    
+                    lbl_path.configure(text=f"🖍️ [편집됨] {os.path.basename(new_final_path)}", text_color="#00FFCC")
+                    update_thumbnail(new_final_path, lbl_thumb) 
+                ImageEditorWindow(manager_win, bg_path, existing_coords, on_save_callback) 
                 
         for slot_num, name in slot_names.items():
             slot_frame = ctk.CTkFrame(slots_frame, fg_color="transparent")
-            slot_frame.pack(fill="x", pady=10, padx=10)
+            slot_frame.pack(fill="x", pady=8, padx=10)
             
-            ctk.CTkLabel(slot_frame, text=name, font=("Arial", 13, "bold"), width=220, anchor="w").pack(side="left", padx=10)
+            lbl_thumb = ctk.CTkLabel(slot_frame, text="사진\n없음", width=70, height=70, fg_color="#3A3B3C", corner_radius=5)
+            lbl_thumb.pack(side="left", padx=(0, 15))
+            thumb_labels[slot_num] = lbl_thumb
+            
+            ctk.CTkLabel(slot_frame, text=name, font=("Arial", 13, "bold"), width=220, anchor="w").pack(side="left")
             
             btn_f = ctk.CTkFrame(slot_frame, fg_color="transparent")
             btn_f.pack(side="right", padx=10)
             
-            current_path = record_dict['ATTACHED_IMAGES'][slot_num]
-            lbl_path = ctk.CTkLabel(slot_frame, text=os.path.basename(current_path) if current_path else "사진 없음", text_color="gray", anchor="w")
+            current_path = record_dict['ATTACHED_IMAGES'].get(slot_num)
+            lbl_path = ctk.CTkLabel(slot_frame, text=os.path.basename(current_path) if current_path else "선택된 파일 없음", text_color="gray", anchor="w")
             
-            btn_edit = ctk.CTkButton(btn_f, text="🖍️ 편집/강조", width=90, fg_color="#2B547E", hover_color="#224263", state="normal" if current_path else "disabled")
+            btn_edit = ctk.CTkButton(btn_f, text="🖍️ 편집/회전/강조", width=120, fg_color="#2B547E", hover_color="#224263", state="normal" if current_path else "disabled")
             btn_find = ctk.CTkButton(btn_f, text="📁 파일 찾기", width=90)
             
-            btn_edit.configure(command=lambda s=slot_num, l=lbl_path: open_editor(s, l))
-            btn_find.configure(command=lambda s=slot_num, l=lbl_path, b=btn_edit: find_file(s, l, b))
+            btn_edit.configure(command=lambda s=slot_num, l=lbl_path, t=lbl_thumb: open_editor(s, l, t))
+            btn_find.configure(command=lambda s=slot_num, l=lbl_path, b=btn_edit, t=lbl_thumb: find_file(s, l, b, t))
             
             btn_edit.pack(side="right", padx=3)
             btn_find.pack(side="right", padx=3)
             lbl_path.pack(side="left", fill="x", expand=True, padx=10)
             
-        ctk.CTkButton(manager_win, text="사진 저장 및 닫기", height=40, font=("Arial", 14, "bold"), fg_color="green", command=manager_win.destroy).pack(pady=20)
+            update_thumbnail(current_path, lbl_thumb)
+            
+        ctk.CTkButton(manager_win, text="사진 적용 완료", height=40, font=("Arial", 14, "bold"), fg_color="green", command=manager_win.destroy).pack(pady=15)
 
-    # 💡 [업데이트] BI 캡처 에디터 실행 함수 (현장사진 에디터 로직 재활용!)
     def open_bi_editor(self, num):
-        path = self.latest_captures.get(num)
-        if path and os.path.exists(path):
-            def on_save_callback(new_path):
-                self.latest_captures[num] = new_path
-                self.coord_labels[num].configure(text="🖍️ 편집됨", text_color="yellow")
-            ImageEditorWindow(self, path, on_save_callback)
+        bg_path = self.bg_captures.get(num)
+        
+        # 방어 코드
+        if not bg_path:
+            bg_path = self.latest_captures.get(num)
+            self.bg_captures[num] = bg_path
+            self.bi_edit_coords[num] = []
+            
+        if bg_path and os.path.exists(bg_path):
+            existing_coords = self.bi_edit_coords[num]
+            def on_save_callback(new_bg_path, new_final_path, new_coords):
+                self.bg_captures[num] = new_bg_path
+                self.latest_captures[num] = new_final_path
+                self.bi_edit_coords[num] = new_coords
+                
+                self.coord_labels[num].configure(text="🖍️ 편집완료", text_color="#00FFCC")
+                self.btn_edits_bi[num].configure(fg_color="green", hover_color="darkgreen") 
+            ImageEditorWindow(self, bg_path, existing_coords, on_save_callback)
 
     def generate_final_tables(self):
-        updated_report_list = []
-        for index, (row_dict, combo, entry, r_type) in enumerate(self.entries_data):
-            row_dict['DEFECT_TYPE'] = combo.get()
-            row_dict['FINAL_DIVE_DEEP'] = entry.get() 
-            updated_report_list.append(row_dict)
-            
-        self.sel_win.destroy() 
-        
+        if not hasattr(self, 'final_report_data') or not self.final_report_data:
+            messagebox.showwarning("데이터 없음", "[1단계]를 먼저 완료해주세요!")
+            return
+
         try: 
             font_title = ImageFont.truetype(FONT_PATH, 22)
             font_header = ImageFont.truetype(FONT_PATH, 14)
@@ -546,7 +595,6 @@ class ICQA_AutoReportApp(ctk.CTk):
         ImageDraw.Draw(main_title_img).text((20, 25), f"📊 ICQA Daily Auto-Report ({self.date_combo.get()})", font=ImageFont.truetype(FONT_PATH, 28), fill=color_navy)
         report_segments.append(main_title_img)
 
-        # 💡 [업데이트] BI 캡처 대시보드형 레이아웃 구현 (가장 중요한 부분!)
         TARGET_H = 350
         margin = 20
         full_w = table_width - 40
@@ -569,10 +617,8 @@ class ICQA_AutoReportApp(ctk.CTk):
                         box_x = 20 if idx == 0 else 20 + half_w + margin
                         try:
                             with Image.open(path) as cap:
-                                cap.thumbnail((half_w, TARGET_H), Image.Resampling.LANCZOS)
-                                paste_x = box_x + (half_w - cap.width) // 2
-                                paste_y = 10 + (TARGET_H - cap.height) // 2
-                                row_img.paste(cap, (paste_x, paste_y))
+                                cap_resized = cap.resize((half_w, TARGET_H), Image.Resampling.LANCZOS)
+                                row_img.paste(cap_resized, (box_x, 10))
                         except Exception as e: print(e)
                         draw.rectangle([box_x, 10, box_x + half_w, 10 + TARGET_H], outline=color_border, width=2)
             else:
@@ -581,10 +627,8 @@ class ICQA_AutoReportApp(ctk.CTk):
                     box_x = 20
                     try:
                         with Image.open(path) as cap:
-                            cap.thumbnail((full_w, TARGET_H), Image.Resampling.LANCZOS)
-                            paste_x = box_x + (full_w - cap.width) // 2
-                            paste_y = 10 + (TARGET_H - cap.height) // 2
-                            row_img.paste(cap, (paste_x, paste_y))
+                            cap_resized = cap.resize((full_w, TARGET_H), Image.Resampling.LANCZOS)
+                            row_img.paste(cap_resized, (box_x, 10))
                     except Exception as e: print(e)
                     draw.rectangle([box_x, 10, box_x + full_w, 10 + TARGET_H], outline=color_border, width=2)
             return row_img
@@ -599,8 +643,7 @@ class ICQA_AutoReportApp(ctk.CTk):
         if seg1 or seg2 or seg3:
             report_segments.append(Image.new('RGB', (table_width, 20), color_white))
 
-        # 데이터 테이블 생성
-        df_final = pd.DataFrame(updated_report_list)
+        df_final = pd.DataFrame(self.final_report_data)
         
         for r_type in df_final['RESOLVETYPE'].unique():
             type_data = df_final[df_final['RESOLVETYPE'] == r_type]
@@ -611,7 +654,7 @@ class ICQA_AutoReportApp(ctk.CTk):
             
             for i, row in type_data.iterrows():
                 ext_id = row['EXTERNALID'] if self.has_external_id else row[self.barcode_col_name]
-                raw_vals = [str(row['GLOBAL_RANK']), self.clean_text(ext_id), self.clean_text(row['DESCRIPTION']), self.clean_text(row['PROBLEM_QTY']), self.clean_text(row['COUNT']), self.clean_text(row['문제유형']), self.clean_text(row['RESOLVETYPE']), self.clean_text(row['DEFECT_TYPE']), self.clean_text(row['FINAL_DIVE_DEEP'])]
+                raw_vals = [str(row['GLOBAL_RANK']), self.clean_text(ext_id), self.clean_text(row['DESCRIPTION']), self.clean_text(row['PROBLEM_QTY']), self.clean_text(row['COUNT']), self.clean_text(row['문제유형']), self.clean_text(row['RESOLVETYPE']), self.clean_text(row.get('DEFECT_TYPE','')), self.clean_text(row.get('FINAL_DIVE_DEEP',''))]
                 wrapped_vals = []
                 max_lines = 1
                 for j, val in enumerate(raw_vals): 
@@ -674,10 +717,10 @@ class ICQA_AutoReportApp(ctk.CTk):
             if b_code != self.selected_barcodes_dict.get(r_type): 
                 continue
                 
-            valid_images = {k: v for k, v in row['ATTACHED_IMAGES'].items() if v and os.path.exists(v)}
-            if valid_images or row['FINAL_DIVE_DEEP']: 
+            valid_images = {k: v for k, v in row.get('ATTACHED_IMAGES', {}).items() if v and os.path.exists(v)}
+            if valid_images or row.get('FINAL_DIVE_DEEP'): 
                 block_title_wrap = self.force_pixel_wrap(f"No.{row['GLOBAL_RANK']} 바코드: {b_code} [{r_type}] 현장 조치 확인", font_header, table_width - 100)
-                deep_text_wrap = self.force_pixel_wrap(self.clean_text(row['FINAL_DIVE_DEEP']), font_row, table_width - 100)
+                deep_text_wrap = self.force_pixel_wrap(self.clean_text(row.get('FINAL_DIVE_DEEP','')), font_row, table_width - 100)
                 title_h = (block_title_wrap.count('\n') + 1) * 20 + 20
                 사유_h = (deep_text_wrap.count('\n') + 1) * 20 + 30
                 img_area_height = 350 
@@ -696,7 +739,6 @@ class ICQA_AutoReportApp(ctk.CTk):
                     with Image.open(valid_images.get("1")) as loc_img_raw:
                         max_first_photo_width = int(table_width * 0.35)
                         loc_img_raw.thumbnail((max_first_photo_width, 300), Image.Resampling.LANCZOS)
-                        
                         img_loc_final = loc_img_raw
                         block_img.paste(img_loc_final, (40, img_area_y_start))
                         current_x = 40 + img_loc_final.width + 30 
@@ -718,7 +760,6 @@ class ICQA_AutoReportApp(ctk.CTk):
                             c_img_raw.thumbnail((per_img_w, 300), Image.Resampling.LANCZOS)
                             paste_x = current_x + idx*(per_img_w + 10)
                             offset_x = paste_x + (per_img_w - c_img_raw.width) // 2
-                            
                             draw_b.text((offset_x, img_area_y_start - 18), f"확인{idx+1}", font=font_row, fill='gray')
                             block_img.paste(c_img_raw, (offset_x, img_area_y_start))
                 else: 
@@ -752,8 +793,10 @@ class ICQA_AutoReportApp(ctk.CTk):
         self.coords[num] = None
         self.save_coords()
         self.latest_captures[num] = None
+        self.bg_captures[num] = None
+        self.bi_edit_coords[num] = []
         self.coord_labels[num].configure(text="❌ 미지정", text_color="gray")
-        self.btn_edits_bi[num].configure(state="disabled")
+        self.btn_edits_bi[num].configure(state="disabled", fg_color="#2B547E")
         self.hide_guide()
 
     def start_snip(self, num):
@@ -849,74 +892,63 @@ class ICQA_AutoReportApp(ctk.CTk):
     def _do_capture(self, num, coord): 
         try:
             bbox = (int(coord[0]), int(coord[1]), int(coord[2]), int(coord[3]))
-            try:
-                img = ImageGrab.grab(bbox=bbox, all_screens=True)
-            except Exception:
-                img = ImageGrab.grab(bbox=bbox)
+            try: img = ImageGrab.grab(bbox=bbox, all_screens=True)
+            except Exception: img = ImageGrab.grab(bbox=bbox)
                 
             filename = f"Capture_{num}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
             img.save(filename)
             
-            # 💡 [업데이트] 캡처 성공 시 최신 파일로 등록하고 에디터 버튼 활성화
+            # 💡 [업데이트] 캡처 시 배경과 최종파일을 모두 동일하게 저장
             self.latest_captures[num] = filename
-            self.coord_labels[num].configure(text="✅ 캡처 완료", text_color="#00FFCC")
-            self.btn_edits_bi[num].configure(state="normal")
+            self.bg_captures[num] = filename
+            self.bi_edit_coords[num] = []
+            
+            self.coord_labels[num].configure(text="✅ 캡처완료", text_color="#00FFCC")
+            self.btn_edits_bi[num].configure(state="normal", fg_color="green", hover_color="darkgreen")
             
         except Exception as e:
             messagebox.showerror("캡처 오류", f"캡처 중 문제가 발생했습니다:\n{str(e)}")
         finally:
-            if self.remote and self.remote.winfo_exists():
-                self.remote.deiconify()
+            if self.remote and self.remote.winfo_exists(): self.remote.deiconify()
             self.deiconify()
 
 # ==========================================
-# 🖌️ 둥근 강조 박스 포토 편집기 (콜백 기능 추가로 완벽 범용화)
+# 🖌️ 둥근 강조 박스 및 사진 회전 에디터 (수정/되돌리기 지원)
 # ==========================================
 class ImageEditorWindow(ctk.CTkToplevel):
-    def __init__(self, parent_win, img_path, on_save_callback):
+    def __init__(self, parent_win, bg_img_path, existing_coords, on_save_callback):
         super().__init__(parent_win)
         self.title("ICQA 사진 강조 편집기")
         self.protocol("WM_DELETE_WINDOW", self.close_window)
         
-        self.img_path = img_path
-        self.on_save_callback = on_save_callback # 💡 저장 후 실행될 함수를 외부에서 받음
+        self.bg_img_path = bg_img_path
+        self.on_save_callback = on_save_callback 
         
         self.current_pen_color = "#FF0000"
         self.current_line_width = 4  
-        self.coords = []
+        # 💡 [업데이트] 기존에 그린 네모가 있다면 그대로 불러옴!
+        self.coords = existing_coords.copy() if existing_coords else []
         
         try: 
-            self.original_pil_img = Image.open(img_path).convert('RGB')
+            # 무조건 '네모가 안 그려진 깨끗한 배경'을 엽니다.
+            self.original_pil_img = Image.open(bg_img_path).convert('RGB')
         except Exception: 
-            messagebox.showerror("이미지 로드 실패", f"{img_path} 로드 실패")
+            messagebox.showerror("이미지 로드 실패", f"{bg_img_path} 로드 실패")
             self.close_window() 
             return
+            
+        self.setup_ui()
+        self.refresh_canvas()
+
+    def setup_ui(self):
+        ctk.CTkLabel(self, text="💡 [90도 회전]으로 방향을 맞춘 후 마우스로 드래그하여 강조 네모를 그리세요.", font=("Arial", 14, "bold")).pack(pady=10)
+        self.main_frame = ctk.CTkFrame(self)
+        self.main_frame.pack(pady=5, padx=10, fill="both", expand=True)
         
-        max_w, max_h = 1000, 700
-        self.scale_factor = min(max_w / self.original_pil_img.width, max_h / self.original_pil_img.height)
-        final_w = int(self.original_pil_img.width * self.scale_factor)
-        final_h = int(self.original_pil_img.height * self.scale_factor)
+        self.canvas_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        self.canvas_frame.pack(side="left", fill="both", expand=True, padx=5)
         
-        self.display_pil_img = self.original_pil_img.resize((final_w, final_h), Image.Resampling.LANCZOS)
-        self.photo_img = ImageTk.PhotoImage(self.display_pil_img)
-        
-        self.center_window(final_w + 170, final_h + 100)
-        self.focus_force()
-        self.grab_set()
-        
-        ctk.CTkLabel(self, text="💡 마우스로 드래그하여 강조 네모를 그리세요. 오른쪽에서 색상과 선 굵기를 변경할 수 있습니다.", font=("Arial", 14, "bold")).pack(pady=10)
-        main_frame = ctk.CTkFrame(self)
-        main_frame.pack(pady=5, padx=10, fill="both", expand=True)
-        
-        self.canvas = tk.Canvas(main_frame, width=final_w, height=final_h, bg="gray", cursor="cross")
-        self.canvas.pack(side="left", padx=5)
-        self.canvas.create_image(0, 0, image=self.photo_img, anchor="nw")
-        
-        self.canvas.bind("<ButtonPress-1>", self.on_press)
-        self.canvas.bind("<B1-Motion>", self.on_drag)
-        self.canvas.bind("<ButtonRelease-1>", self.on_release)
-        
-        palette_frame = ctk.CTkFrame(main_frame, width=140)
+        palette_frame = ctk.CTkFrame(self.main_frame, width=140)
         palette_frame.pack(side="right", fill="y", padx=5)
         
         ctk.CTkLabel(palette_frame, text="🎨 강조 색상", font=("Arial", 13, "bold")).pack(pady=(10, 5))
@@ -930,23 +962,71 @@ class ImageEditorWindow(ctk.CTkToplevel):
 
         ctk.CTkLabel(palette_frame, text="━━━━━━━━━━", text_color="gray").pack(pady=5)
         ctk.CTkLabel(palette_frame, text="📏 선 굵기", font=("Arial", 13, "bold")).pack(pady=(5, 5))
-        
         self.width_label = ctk.CTkLabel(palette_frame, text=f"현재 굵기: {self.current_line_width}", font=("Arial", 12))
         self.width_label.pack(pady=(0, 5))
         
         width_btn_frame = ctk.CTkFrame(palette_frame, fg_color="transparent")
         width_btn_frame.pack(pady=5)
-        
         ctk.CTkButton(width_btn_frame, text="➖", width=40, font=("Arial", 14, "bold"), command=self.decrease_width).pack(side="left", padx=2)
         ctk.CTkButton(width_btn_frame, text="➕", width=40, font=("Arial", 14, "bold"), command=self.increase_width).pack(side="left", padx=2)
         
+        ctk.CTkLabel(palette_frame, text="━━━━━━━━━━", text_color="gray").pack(pady=5)
+        ctk.CTkButton(palette_frame, text="🔄 90도 회전", font=("Arial", 13, "bold"), width=100, height=40, fg_color="#E56717", hover_color="#C35613", command=self.rotate_image).pack(pady=5)
+
         bot_frame = ctk.CTkFrame(self, fg_color="transparent")
         bot_frame.pack(side="bottom", fill="x", pady=15, padx=20)
         
-        ctk.CTkButton(bot_frame, text="🖍️ 화면 초기화", width=120, fg_color="darkred", hover_color="maroon", command=self.clear_canvas).pack(side="left")
+        # 💡 [업데이트] 전체 지우기 & 되돌리기 버튼!
+        ctk.CTkButton(bot_frame, text="🖍️ 전체 지우기", width=100, fg_color="darkred", hover_color="maroon", command=self.clear_canvas_lines).pack(side="left")
+        ctk.CTkButton(bot_frame, text="↩️ 되돌리기", width=100, fg_color="#E56717", hover_color="#C35613", command=self.undo_last_line).pack(side="left", padx=5)
         
-        ctk.CTkButton(bot_frame, text="❌ 취소 및 닫기", width=120, fg_color="#454545", command=self.close_window).pack(side="right", padx=5)
-        ctk.CTkButton(bot_frame, text="✨ 편집 완료 및 사진 적용 ✨", width=200, height=40, font=("Arial", 14, "bold"), fg_color="green", command=self.save_edits).pack(side="right", padx=15)
+        ctk.CTkButton(bot_frame, text="❌ 취소 및 닫기", width=100, fg_color="#454545", command=self.close_window).pack(side="right", padx=5)
+        ctk.CTkButton(bot_frame, text="✨ 편집 완료 및 적용 ✨", width=180, height=40, font=("Arial", 14, "bold"), fg_color="green", command=self.save_edits).pack(side="right", padx=15)
+
+    def refresh_canvas(self):
+        for widget in self.canvas_frame.winfo_children():
+            widget.destroy()
+            
+        max_w, max_h = 1000, 650
+        self.scale_factor = min(max_w / self.original_pil_img.width, max_h / self.original_pil_img.height)
+        final_w = int(self.original_pil_img.width * self.scale_factor)
+        final_h = int(self.original_pil_img.height * self.scale_factor)
+        
+        self.display_pil_img = self.original_pil_img.resize((final_w, final_h), Image.Resampling.LANCZOS)
+        self.photo_img = ImageTk.PhotoImage(self.display_pil_img)
+        
+        self.center_window(final_w + 180, final_h + 120)
+        
+        self.canvas = tk.Canvas(self.canvas_frame, width=final_w, height=final_h, bg="gray", cursor="cross")
+        self.canvas.pack()
+        
+        self.canvas.bind("<ButtonPress-1>", self.on_press)
+        self.canvas.bind("<B1-Motion>", self.on_drag)
+        self.canvas.bind("<ButtonRelease-1>", self.on_release)
+        
+        self.redraw_canvas()
+
+    # 💡 [업데이트] 저장된 좌표를 읽어와서 화면에 다시 그려주는 만능 함수!
+    def redraw_canvas(self):
+        self.canvas.delete("all")
+        self.canvas.create_image(0, 0, image=self.photo_img, anchor="nw")
+        
+        for coord in self.coords:
+            orig_x1, orig_y1, orig_x2, orig_y2 = coord['bbox']
+            cx1 = orig_x1 * self.scale_factor
+            cy1 = orig_y1 * self.scale_factor
+            cx2 = orig_x2 * self.scale_factor
+            cy2 = orig_y2 * self.scale_factor
+            self.canvas.create_rectangle(cx1, cy1, cx2, cy2, outline=coord['color'], width=coord['width'])
+
+    def rotate_image(self):
+        if self.coords:
+            ans = messagebox.askyesno("회전 확인", "사진을 회전하면 기존에 그렸던 네모가 모두 초기화됩니다. 계속하시겠습니까?", parent=self)
+            if not ans: return
+            
+        self.original_pil_img = self.original_pil_img.rotate(-90, expand=True)
+        self.coords = [] # 좌표계가 틀어지므로 전부 지워줍니다.
+        self.refresh_canvas()
 
     def center_window(self, width, height): 
         screen_width = self.winfo_screenwidth()
@@ -956,10 +1036,8 @@ class ImageEditorWindow(ctk.CTkToplevel):
         self.geometry(f"{width}x{height}+{x}+{y}")
 
     def close_window(self):
-        try:
-            self.grab_release() 
-        except Exception:
-            pass
+        try: self.grab_release() 
+        except Exception: pass
         self.withdraw() 
         self.after(10, self.destroy) 
 
@@ -981,11 +1059,7 @@ class ImageEditorWindow(ctk.CTkToplevel):
     def on_press(self, event): 
         self.start_x = event.x
         self.start_y = event.y
-        self.current_rect_id = self.canvas.create_rectangle(
-            self.start_x, self.start_y, self.start_x, self.start_y, 
-            outline=self.current_pen_color, 
-            width=self.current_line_width 
-        )
+        self.current_rect_id = self.canvas.create_rectangle(self.start_x, self.start_y, self.start_x, self.start_y, outline=self.current_pen_color, width=self.current_line_width)
 
     def on_drag(self, event): 
         self.canvas.coords(self.current_rect_id, self.start_x, self.start_y, event.x, event.y)
@@ -1002,39 +1076,42 @@ class ImageEditorWindow(ctk.CTkToplevel):
                 'color': self.current_pen_color,
                 'width': self.current_line_width 
             })
-        else: 
-            self.canvas.delete(self.current_rect_id)
+        self.redraw_canvas()
 
-    def clear_canvas(self): 
-        self.canvas.delete("all")
-        self.canvas.create_image(0, 0, image=self.photo_img, anchor="nw")
+    # 💡 [업데이트] 실행 취소 기능
+    def undo_last_line(self):
+        if self.coords:
+            self.coords.pop() # 마지막에 그린 네모 삭제
+            self.redraw_canvas()
+
+    def clear_canvas_lines(self): 
         self.coords = []
+        self.redraw_canvas()
 
     def save_edits(self):
-        if not self.coords: 
-            messagebox.showwarning("강조 표시 없음", "네모를 그려주세요.")
-            return
-            
         try:
+            timestamp = datetime.now().strftime('%H%M%S')
+            
+            # 1. 깨끗한 배경 사진 따로 저장 (회전했을 수 있으므로)
+            new_bg_filename = f"bg_{timestamp}.png"
+            new_bg_path = os.path.abspath(new_bg_filename)
+            self.original_pil_img.save(new_bg_path)
+            
+            # 2. 선을 합친 압축(Flatten) 사진 별도 생성
             final_img = self.original_pil_img.copy()
             draw = ImageDraw.Draw(final_img)
-            
             for coord in self.coords: 
                 scaled_width = max(1, int(coord['width'] / self.scale_factor))
-                draw.rounded_rectangle(
-                    coord['bbox'], 
-                    radius=int(scaled_width * 2), 
-                    outline=coord['color'], 
-                    width=scaled_width
-                )
+                draw.rounded_rectangle(coord['bbox'], radius=int(scaled_width * 2), outline=coord['color'], width=scaled_width)
                 
-            edited_filename = f"edited_img_{datetime.now().strftime('%H%M%S')}.png"
-            final_img.save(edited_filename)
+            final_filename = f"edited_{timestamp}.png"
+            final_path = os.path.abspath(final_filename)
+            final_img.save(final_path)
             
-            # 💡 [업데이트] 외부에서 넘겨준 저장 함수 실행 (현장 사진이든 BI 캡처든 대응)
-            self.on_save_callback(os.path.abspath(edited_filename))
+            # 3. 콜백 함수로 3가지 데이터(배경, 완성본, 좌표)를 모두 전달!
+            self.on_save_callback(new_bg_path, final_path, self.coords)
             
-            messagebox.showinfo("편집 완료", "사진에 강조 표시가 적용되었습니다!")
+            messagebox.showinfo("편집 완료", "사진 편집이 적용되었습니다!")
             self.close_window() 
         except Exception as e: 
             messagebox.showerror("저장 실패", f"사진을 저장할 수 없습니다.\n{e}")
