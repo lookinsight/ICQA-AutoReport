@@ -319,9 +319,8 @@ class ICQA_AutoReportApp(ctk.CTk):
                 row_dict['RANK'] = index + 1 
                 row_dict['GLOBAL_RANK'] = global_rank
                 
-                # 💡 [버그 수정 1] 엑셀에서 가져온 '문제유형'과 '사유'를 절대 지우지 않고 그대로 보존!
-                defect_from_excel = self.clean_text(row_dict.get('문제유형', 'Found'))
-                row_dict['DEFECT_TYPE'] = defect_from_excel if defect_from_excel else "Found"
+                # 💡 [버그 수정] 화살표 색상을 위한 콤보박스 기본값은 무조건 "Found"로 고정!
+                row_dict['DEFECT_TYPE'] = "Found" 
                 
                 reason_from_excel = self.clean_text(row_dict.get('사유', ''))
                 row_dict['FINAL_DIVE_DEEP'] = reason_from_excel 
@@ -410,7 +409,6 @@ class ICQA_AutoReportApp(ctk.CTk):
             entry = ctk.CTkEntry(bot_frame, font=("Arial", 13))
             entry.pack(side="left", fill="x", expand=True, padx=(10, 0))
             
-            # 💡 [버그 수정 2] 이제 엑셀에서 가져온 사유가 팝업창에 제대로 뜹니다!
             dive_val = row_dict.get('FINAL_DIVE_DEEP', '')
             entry.insert(0, dive_val if dive_val else "사유 미기재")
             
@@ -746,7 +744,6 @@ class ICQA_AutoReportApp(ctk.CTk):
                     pad_x = 10
                     inner_start_x = 10
                 
-                # 💡 [버그 수정 3] 텍스트가 박스 바깥으로 튕겨나가지 않도록 여유 마진(30)을 더 줘서 안전하게 줄바꿈
                 block_title_wrap = self.force_pixel_wrap(f"No.{row['GLOBAL_RANK']} 바코드: {b_code} [{r_type}]", font_header, block_w - (pad_x*2))
                 deep_text_wrap = self.force_pixel_wrap(self.clean_text(row.get('FINAL_DIVE_DEEP','')), font_row, block_w - (pad_x*2) - 30)
                 
@@ -768,7 +765,6 @@ class ICQA_AutoReportApp(ctk.CTk):
                 img_area_y_start = title_h + 10
                 current_x = inner_start_x
                 
-                # 메인 사진 수직 중앙 정렬
                 if valid_images.get("1"):
                     with Image.open(valid_images.get("1")) as loc_img_raw:
                         max_first_photo_width = int(block_w * 0.35)
@@ -783,7 +779,6 @@ class ICQA_AutoReportApp(ctk.CTk):
                     draw_b.text((current_x, center_y_no_img), "[사진 없음]", font=font_header, fill='gray')
                     current_x += int(block_w * 0.35) + pad_x
                     
-                # 화살표 수직 중앙 정렬
                 defect_val = self.clean_text(row.get('DEFECT_TYPE', 'Found'))
                 arrow_color = color_map.get(defect_val, "#FFB300")
                 img_arrow_raw = create_dynamic_arrow(arrow_color)
@@ -795,7 +790,6 @@ class ICQA_AutoReportApp(ctk.CTk):
                 block_img.paste(arrow_resized, (current_x, center_y_arrow), mask=arrow_resized)
                 current_x += arrow_resized.width + pad_x 
                     
-                # 서브 사진 수직 중앙 정렬
                 conf_images_paths = [v for k, v in valid_images.items() if k in ["2", "3", "4"]]
                 if conf_images_paths:
                     avail_width = block_w - current_x - pad_x
@@ -815,14 +809,13 @@ class ICQA_AutoReportApp(ctk.CTk):
                     center_y_no_sub = img_area_y_start + (img_area_height // 2) - 10
                     draw_b.text((current_x + 5, center_y_no_sub), "[조치 사진 없음]", font=font_row, fill='gray')
                     
-                # 💡 [버그 수정 4] 사유 박스에 글자가 짤리지 않게 '안전한 좌측 정렬'로 렌더링 방식 완전 교체!
                 사유_y = title_h + img_area_height + 10
                 
                 box_x_start = pad_x
                 box_x_end = block_w - pad_x
                 draw_b.rectangle([box_x_start, 사유_y, box_x_end, 사유_y + 사유_h - 10], fill='#F7F9FC', outline='#D0D7DE')
                 
-                text_x = pad_x + 15  # 왼쪽에서 조금 띄운 위치에 딱 고정
+                text_x = pad_x + 15  
                 draw_b.multiline_text((text_x, 사유_y + 10), deep_text_wrap, font=font_row, fill='#1A365D', spacing=6, align='left')
                 
                 photo_blocks.append(block_img)
