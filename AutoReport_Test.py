@@ -24,7 +24,6 @@ ctk.set_default_color_theme("blue")
 
 COORD_FILE = "capture_coords.json"
 FONT_PATH = "font.ttf" 
-ARROW_ICON_PATH = "arrow_icon.png" 
 
 class ICQA_AutoReportApp(ctk.CTk):
     def __init__(self):
@@ -42,7 +41,6 @@ class ICQA_AutoReportApp(ctk.CTk):
         self.barcode_candidates = {} 
         self.selected_barcodes_dict = {} 
         
-        # 💡 [업데이트] 수정 기능을 위해 원본 배경과 편집 좌표를 따로 저장!
         self.latest_captures = {"1": None, "2": None, "3": None, "4": None, "5": None}
         self.bg_captures = {"1": None, "2": None, "3": None, "4": None, "5": None}
         self.bi_edit_coords = {"1": [], "2": [], "3": [], "4": [], "5": []}
@@ -51,8 +49,6 @@ class ICQA_AutoReportApp(ctk.CTk):
             messagebox.showerror("필수 파일 누락", f"프로그램 폴더 안에 '{FONT_PATH}' (한글 폰트) 파일이 반드시 있어야 합니다.\n\n프로그램을 종료합니다.")
             self.destroy()
             return
-            
-        self.auto_create_arrow_icon()
 
         # ==========================================
         # 📊 [1단계] 엑셀 데이터 파일 선택 UI
@@ -134,6 +130,14 @@ class ICQA_AutoReportApp(ctk.CTk):
         frame_final = ctk.CTkFrame(self, fg_color="transparent")
         frame_final.pack(pady=5, padx=20, fill="x")
         
+        self.photo_layout_mode = ctk.StringVar(value="2col") 
+        frame_layout_opt = ctk.CTkFrame(frame_final, fg_color="transparent")
+        frame_layout_opt.pack(pady=(0, 10))
+        ctk.CTkLabel(frame_layout_opt, text="🖼️ 현장사진 레이아웃:", font=("Arial", 13, "bold"), text_color="#00FFCC").pack(side="left")
+        ctk.CTkRadioButton(frame_layout_opt, text="1단 보기(크게)", variable=self.photo_layout_mode, value="1col").pack(side="left", padx=(10, 5))
+        ctk.CTkRadioButton(frame_layout_opt, text="2단 보기(압축)", variable=self.photo_layout_mode, value="2col").pack(side="left", padx=5)
+        ctk.CTkRadioButton(frame_layout_opt, text="3단 보기(초압축)", variable=self.photo_layout_mode, value="3col").pack(side="left", padx=5)
+
         self.btn_final_report = ctk.CTkButton(frame_final, text="✨ [3단계] 최종 통합 One-Page 보고서 생성 ✨", height=50, font=("Arial", 16, "bold"), fg_color="#B8860B", hover_color="#8B6508", command=self.generate_final_tables)
         self.btn_final_report.pack(fill="x")
 
@@ -146,16 +150,6 @@ class ICQA_AutoReportApp(ctk.CTk):
         x = int((screen_width / 2) - (width / 2))
         y = int((screen_height / 2) - (height / 2))
         target_window.geometry(f"{width}x{height}+{x}+{y}")
-
-    def auto_create_arrow_icon(self):
-        rect_color = '#1A365D'
-        arrow_color = '#F3E5AB'
-        if not os.path.exists(ARROW_ICON_PATH):
-            img = Image.new("RGBA", (100, 40), (255, 255, 255, 0))
-            draw = ImageDraw.Draw(img)
-            draw.rectangle([10, 10, 70, 30], fill=rect_color) 
-            draw.polygon([(70, 0), (100, 20), (70, 40)], fill=arrow_color)
-            img.save(ARROW_ICON_PATH)
 
     def clean_text(self, text):
         if pd.isna(text): return ""
@@ -319,7 +313,6 @@ class ICQA_AutoReportApp(ctk.CTk):
             for index, row in merged.iterrows(): 
                 row_dict = row.to_dict()
                 if 'ATTACHED_IMAGES' not in row_dict:
-                    # 💡 무한 수정을 위해 BG(배경 원본)와 COORDS(네모 좌표)를 별도 저장 공간 마련
                     row_dict['ATTACHED_IMAGES'] = {"1": None, "2": None, "3": None, "4": None}
                     row_dict['BG_IMAGES'] = {"1": None, "2": None, "3": None, "4": None}
                     row_dict['EDIT_COORDS'] = {"1": [], "2": [], "3": [], "4": []}
@@ -490,7 +483,6 @@ class ICQA_AutoReportApp(ctk.CTk):
         def find_file(slot_num, lbl_path, btn_edit, lbl_thumb):
             file_path = filedialog.askopenfilename(parent=manager_win, filetypes=[("Image files", "*.jpg *.jpeg *.png")])
             if file_path: 
-                # 💡 사진 등록 시 원본/압축파일/좌표를 모두 초기화
                 record_dict['BG_IMAGES'][slot_num] = file_path
                 record_dict['ATTACHED_IMAGES'][slot_num] = file_path
                 record_dict['EDIT_COORDS'][slot_num] = []
@@ -501,8 +493,6 @@ class ICQA_AutoReportApp(ctk.CTk):
                 
         def open_editor(slot_num, lbl_path, lbl_thumb):
             bg_path = record_dict.get('BG_IMAGES', {}).get(slot_num)
-            
-            # 옛날 버전으로 저장된 데이터 호환성을 위한 방어 코드
             if not bg_path: 
                 bg_path = record_dict['ATTACHED_IMAGES'][slot_num]
                 record_dict['BG_IMAGES'][slot_num] = bg_path
@@ -511,7 +501,6 @@ class ICQA_AutoReportApp(ctk.CTk):
             if bg_path and os.path.exists(bg_path): 
                 existing_coords = record_dict['EDIT_COORDS'][slot_num]
                 def on_save_callback(new_bg_path, new_final_path, new_coords):
-                    # 💡 무한 수정을 위해 3가지를 전부 저장!
                     record_dict['BG_IMAGES'][slot_num] = new_bg_path
                     record_dict['ATTACHED_IMAGES'][slot_num] = new_final_path
                     record_dict['EDIT_COORDS'][slot_num] = new_coords
@@ -552,8 +541,6 @@ class ICQA_AutoReportApp(ctk.CTk):
 
     def open_bi_editor(self, num):
         bg_path = self.bg_captures.get(num)
-        
-        # 방어 코드
         if not bg_path:
             bg_path = self.latest_captures.get(num)
             self.bg_captures[num] = bg_path
@@ -583,6 +570,8 @@ class ICQA_AutoReportApp(ctk.CTk):
             messagebox.showerror("폰트 로드 실패", f"'{FONT_PATH}' 로드 실패: {e}")
             return
             
+        layout_mode = self.photo_layout_mode.get()
+            
         cols = [("No.", 40), ("External ID", 110), ("SKU Name", 280), ("Problem QTY", 100), ("Problem 건수", 100), ("Problem Type", 150), ("Solve Type", 180), ("Defect Type", 100), ("Dive-Deep 사유", 400)]
         table_width = sum([w for _, w in cols])
         report_segments = []
@@ -599,6 +588,7 @@ class ICQA_AutoReportApp(ctk.CTk):
         margin = 20
         full_w = table_width - 40
         half_w = (full_w - margin) // 2
+        third_w = (full_w - margin * 2) // 3 
         
         row1_caps = [self.latest_captures.get("1")]
         row2_caps = [self.latest_captures.get("2"), self.latest_captures.get("3")]
@@ -703,12 +693,25 @@ class ICQA_AutoReportApp(ctk.CTk):
             report_segments.append(img_table)
             report_segments.append(Image.new('RGB', (table_width, 20), color_white))
 
-        try: img_arrow_raw = Image.open(ARROW_ICON_PATH)
-        except Exception: img_arrow_raw = None
-            
         photo_title_img = Image.new('RGB', (table_width, 60), color_white)
         ImageDraw.Draw(photo_title_img).text((15, 20), "📸 현장 조치 확인 (각 항목별 대표 SKU)", font=font_title, fill=color_navy)
         report_segments.append(photo_title_img)
+        
+        # 💡 [업데이트] DEFECT_TYPE에 따라 단색 화살표를 즉석에서 그려주는 엔진 추가!
+        def create_dynamic_arrow(color_hex):
+            arr_img = Image.new("RGBA", (100, 40), (255, 255, 255, 0)) # 배경 투명하게
+            draw_arr = ImageDraw.Draw(arr_img)
+            draw_arr.rectangle([0, 10, 70, 30], fill=color_hex) # 화살표 몸통 (직사각형)
+            draw_arr.polygon([(70, 0), (100, 20), (70, 40)], fill=color_hex) # 화살표 머리 (삼각형)
+            return arr_img
+
+        color_map = {
+            "Found": "#FFB300",       # 🌟 긍정적인 골드
+            "Loss": "#212121",        # ⬛ 다크 챠콜(검정)
+            "DAMAGED_SKU": "#9E9E9E"  # 🌫️ 시그니처 그레이
+        }
+
+        photo_blocks = [] 
         
         for i, row in df_final.iterrows():
             b_code = self.clean_text(row[self.barcode_col_name])
@@ -719,58 +722,120 @@ class ICQA_AutoReportApp(ctk.CTk):
                 
             valid_images = {k: v for k, v in row.get('ATTACHED_IMAGES', {}).items() if v and os.path.exists(v)}
             if valid_images or row.get('FINAL_DIVE_DEEP'): 
-                block_title_wrap = self.force_pixel_wrap(f"No.{row['GLOBAL_RANK']} 바코드: {b_code} [{r_type}] 현장 조치 확인", font_header, table_width - 100)
-                deep_text_wrap = self.force_pixel_wrap(self.clean_text(row.get('FINAL_DIVE_DEEP','')), font_row, table_width - 100)
+                
+                if layout_mode == "1col":
+                    block_w = table_width
+                    img_area_height = 350
+                    pad_x = 30
+                    inner_start_x = 40
+                elif layout_mode == "2col":
+                    block_w = half_w
+                    img_area_height = 250
+                    pad_x = 15
+                    inner_start_x = 15
+                else: 
+                    block_w = third_w
+                    img_area_height = 180 
+                    pad_x = 10
+                    inner_start_x = 10
+                
+                block_title_wrap = self.force_pixel_wrap(f"No.{row['GLOBAL_RANK']} 바코드: {b_code} [{r_type}]", font_header, block_w - (pad_x*2))
+                deep_text_wrap = self.force_pixel_wrap(self.clean_text(row.get('FINAL_DIVE_DEEP','')), font_row, block_w - (pad_x*2))
                 title_h = (block_title_wrap.count('\n') + 1) * 20 + 20
                 사유_h = (deep_text_wrap.count('\n') + 1) * 20 + 30
-                img_area_height = 350 
                 
                 block_total_height = title_h + img_area_height + 사유_h + 30 
                 
-                block_img = Image.new('RGB', (table_width, block_total_height), color_white)
+                block_img = Image.new('RGB', (block_w, block_total_height), color_white)
                 draw_b = ImageDraw.Draw(block_img)
-                draw_b.rectangle([15, 0, table_width - 15, block_total_height - 10], outline=color_border, width=1)
-                draw_b.text((30, 10), block_title_wrap, font=font_header, fill='black', spacing=4)
+                
+                if layout_mode == "1col":
+                    draw_b.rectangle([15, 0, block_w - 16, block_total_height - 10], outline=color_border, width=2)
+                    draw_b.text((30, 10), block_title_wrap, font=font_header, fill='black', spacing=4)
+                else:
+                    draw_b.rectangle([0, 0, block_w - 1, block_total_height - 10], outline=color_border, width=2)
+                    draw_b.text((pad_x, 10), block_title_wrap, font=font_header, fill='black', spacing=4)
                 
                 img_area_y_start = title_h + 10
-                current_x = 40
+                current_x = inner_start_x
                 
+                # 1번 사진
                 if valid_images.get("1"):
                     with Image.open(valid_images.get("1")) as loc_img_raw:
-                        max_first_photo_width = int(table_width * 0.35)
-                        loc_img_raw.thumbnail((max_first_photo_width, 300), Image.Resampling.LANCZOS)
+                        max_first_photo_width = int(block_w * 0.35)
+                        loc_img_raw.thumbnail((max_first_photo_width, img_area_height - 40), Image.Resampling.LANCZOS)
                         img_loc_final = loc_img_raw
-                        block_img.paste(img_loc_final, (40, img_area_y_start))
-                        current_x = 40 + img_loc_final.width + 30 
+                        block_img.paste(img_loc_final, (current_x, img_area_y_start))
+                        current_x += img_loc_final.width + pad_x 
                 else: 
-                    draw_b.text((100, img_area_y_start + 100), "[1번: 로케이션 사진 없음]", font=font_header, fill='gray')
-                    current_x = 300 + 30
+                    draw_b.text((current_x, img_area_y_start + (img_area_height//3)), "[사진 없음]", font=font_header, fill='gray')
+                    current_x += int(block_w * 0.35) + pad_x
                     
-                if img_arrow_raw: 
-                    arrow_resized = img_arrow_raw.resize((int(img_arrow_raw.width * (40 / img_arrow_raw.height)), 40), Image.Resampling.LANCZOS)
-                    block_img.paste(arrow_resized, (current_x, img_area_y_start + 130), mask=arrow_resized)
-                    current_x += arrow_resized.width + 30 
+                # 💡 [업데이트] 여기서 화살표를 즉석으로 만들어서 붙여줍니다!
+                defect_val = self.clean_text(row.get('DEFECT_TYPE', 'Found'))
+                arrow_color = color_map.get(defect_val, "#FFB300") # 매칭 안 되면 기본 골드
+                img_arrow_raw = create_dynamic_arrow(arrow_color)
+                
+                arr_h = 40 if layout_mode == "1col" else (25 if layout_mode == "2col" else 15)
+                arrow_resized = img_arrow_raw.resize((int(img_arrow_raw.width * (arr_h / img_arrow_raw.height)), arr_h), Image.Resampling.LANCZOS)
+                block_img.paste(arrow_resized, (current_x, img_area_y_start + (img_area_height // 2) - 20), mask=arrow_resized)
+                current_x += arrow_resized.width + pad_x 
                     
+                # 2~4번 사진
                 conf_images_paths = [v for k, v in valid_images.items() if k in ["2", "3", "4"]]
                 if conf_images_paths:
-                    avail_width = table_width - 30 - current_x - 10
+                    avail_width = block_w - current_x - pad_x
                     per_img_w = int((avail_width - (len(conf_images_paths)-1)*10) / len(conf_images_paths))
-                    for idx, c_path in enumerate(conf_images_paths):
-                        with Image.open(c_path) as c_img_raw:
-                            c_img_raw.thumbnail((per_img_w, 300), Image.Resampling.LANCZOS)
-                            paste_x = current_x + idx*(per_img_w + 10)
-                            offset_x = paste_x + (per_img_w - c_img_raw.width) // 2
-                            draw_b.text((offset_x, img_area_y_start - 18), f"확인{idx+1}", font=font_row, fill='gray')
-                            block_img.paste(c_img_raw, (offset_x, img_area_y_start))
+                    if per_img_w > 0:
+                        for idx, c_path in enumerate(conf_images_paths):
+                            with Image.open(c_path) as c_img_raw:
+                                c_img_raw.thumbnail((per_img_w, img_area_height - 40), Image.Resampling.LANCZOS)
+                                paste_x = current_x + idx*(per_img_w + 10)
+                                offset_x = paste_x + max(0, (per_img_w - c_img_raw.width) // 2)
+                                font_size_conf = font_row if layout_mode != "3col" else ImageFont.truetype(FONT_PATH, 11)
+                                draw_b.text((offset_x, img_area_y_start - 18), f"확인{idx+1}", font=font_size_conf, fill='gray')
+                                block_img.paste(c_img_raw, (offset_x, img_area_y_start))
                 else: 
-                    draw_b.text((current_x + 10, img_area_y_start + 100), "[조치 확인 사진 없음]", font=font_row, fill='gray')
+                    draw_b.text((current_x + 5, img_area_y_start + (img_area_height//3)), "[조치 사진 없음]", font=font_row, fill='gray')
                     
-                사유_y = title_h + 350 + 10
+                # 사유 텍스트
+                사유_y = title_h + img_area_height + 10
                 text_w = self.get_text_width(font_row, deep_text_wrap.split('\n')[0])
-                center_position_x = (table_width - text_w) / 2 if text_w < table_width - 60 else 30
-                draw_b.rectangle([30, 사유_y, table_width - 30, 사유_y + 사유_h - 10], fill='#F7F9FC', outline='#D0D7DE')
+                center_position_x = (block_w - text_w) / 2 if text_w < block_w - (pad_x*2) else pad_x
+                box_x_start = pad_x
+                box_x_end = block_w - pad_x
+                draw_b.rectangle([box_x_start, 사유_y, box_x_end, 사유_y + 사유_h - 10], fill='#F7F9FC', outline='#D0D7DE')
                 draw_b.multiline_text((center_position_x, 사유_y + 10), deep_text_wrap, font=font_row, fill='#1A365D', spacing=6, align='center')
-                report_segments.append(block_img)
+                
+                photo_blocks.append(block_img)
+
+        # 💡 블록들 레이아웃 병합
+        if layout_mode == "1col":
+            for blk in photo_blocks:
+                report_segments.append(blk)
+        elif layout_mode == "2col":
+            for i in range(0, len(photo_blocks), 2):
+                h1 = photo_blocks[i].height
+                h2 = photo_blocks[i+1].height if i+1 < len(photo_blocks) else 0
+                row_h = max(h1, h2)
+                row_img = Image.new('RGB', (table_width, row_h), color_white)
+                row_img.paste(photo_blocks[i], (20, 0))
+                if i+1 < len(photo_blocks):
+                    row_img.paste(photo_blocks[i+1], (20 + half_w + margin, 0))
+                report_segments.append(row_img)
+        elif layout_mode == "3col":
+            for i in range(0, len(photo_blocks), 3):
+                h1 = photo_blocks[i].height
+                h2 = photo_blocks[i+1].height if i+1 < len(photo_blocks) else 0
+                h3 = photo_blocks[i+2].height if i+2 < len(photo_blocks) else 0
+                row_h = max(h1, h2, h3)
+                row_img = Image.new('RGB', (table_width, row_h), color_white)
+                row_img.paste(photo_blocks[i], (20, 0))
+                if i+1 < len(photo_blocks):
+                    row_img.paste(photo_blocks[i+1], (20 + third_w + margin, 0))
+                if i+2 < len(photo_blocks):
+                    row_img.paste(photo_blocks[i+2], (20 + 2*(third_w + margin), 0))
+                report_segments.append(row_img)
 
         img_final_master = Image.new('RGB', (table_width, sum(seg.height for seg in report_segments) + 30), color_white)
         current_y_paste = 0
@@ -898,7 +963,6 @@ class ICQA_AutoReportApp(ctk.CTk):
             filename = f"Capture_{num}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
             img.save(filename)
             
-            # 💡 [업데이트] 캡처 시 배경과 최종파일을 모두 동일하게 저장
             self.latest_captures[num] = filename
             self.bg_captures[num] = filename
             self.bi_edit_coords[num] = []
@@ -926,11 +990,9 @@ class ImageEditorWindow(ctk.CTkToplevel):
         
         self.current_pen_color = "#FF0000"
         self.current_line_width = 4  
-        # 💡 [업데이트] 기존에 그린 네모가 있다면 그대로 불러옴!
         self.coords = existing_coords.copy() if existing_coords else []
         
         try: 
-            # 무조건 '네모가 안 그려진 깨끗한 배경'을 엽니다.
             self.original_pil_img = Image.open(bg_img_path).convert('RGB')
         except Exception: 
             messagebox.showerror("이미지 로드 실패", f"{bg_img_path} 로드 실패")
@@ -976,7 +1038,6 @@ class ImageEditorWindow(ctk.CTkToplevel):
         bot_frame = ctk.CTkFrame(self, fg_color="transparent")
         bot_frame.pack(side="bottom", fill="x", pady=15, padx=20)
         
-        # 💡 [업데이트] 전체 지우기 & 되돌리기 버튼!
         ctk.CTkButton(bot_frame, text="🖍️ 전체 지우기", width=100, fg_color="darkred", hover_color="maroon", command=self.clear_canvas_lines).pack(side="left")
         ctk.CTkButton(bot_frame, text="↩️ 되돌리기", width=100, fg_color="#E56717", hover_color="#C35613", command=self.undo_last_line).pack(side="left", padx=5)
         
@@ -1006,7 +1067,6 @@ class ImageEditorWindow(ctk.CTkToplevel):
         
         self.redraw_canvas()
 
-    # 💡 [업데이트] 저장된 좌표를 읽어와서 화면에 다시 그려주는 만능 함수!
     def redraw_canvas(self):
         self.canvas.delete("all")
         self.canvas.create_image(0, 0, image=self.photo_img, anchor="nw")
@@ -1025,7 +1085,7 @@ class ImageEditorWindow(ctk.CTkToplevel):
             if not ans: return
             
         self.original_pil_img = self.original_pil_img.rotate(-90, expand=True)
-        self.coords = [] # 좌표계가 틀어지므로 전부 지워줍니다.
+        self.coords = [] 
         self.refresh_canvas()
 
     def center_window(self, width, height): 
@@ -1078,10 +1138,9 @@ class ImageEditorWindow(ctk.CTkToplevel):
             })
         self.redraw_canvas()
 
-    # 💡 [업데이트] 실행 취소 기능
     def undo_last_line(self):
         if self.coords:
-            self.coords.pop() # 마지막에 그린 네모 삭제
+            self.coords.pop() 
             self.redraw_canvas()
 
     def clear_canvas_lines(self): 
@@ -1092,12 +1151,10 @@ class ImageEditorWindow(ctk.CTkToplevel):
         try:
             timestamp = datetime.now().strftime('%H%M%S')
             
-            # 1. 깨끗한 배경 사진 따로 저장 (회전했을 수 있으므로)
             new_bg_filename = f"bg_{timestamp}.png"
             new_bg_path = os.path.abspath(new_bg_filename)
             self.original_pil_img.save(new_bg_path)
             
-            # 2. 선을 합친 압축(Flatten) 사진 별도 생성
             final_img = self.original_pil_img.copy()
             draw = ImageDraw.Draw(final_img)
             for coord in self.coords: 
@@ -1108,7 +1165,6 @@ class ImageEditorWindow(ctk.CTkToplevel):
             final_path = os.path.abspath(final_filename)
             final_img.save(final_path)
             
-            # 3. 콜백 함수로 3가지 데이터(배경, 완성본, 좌표)를 모두 전달!
             self.on_save_callback(new_bg_path, final_path, self.coords)
             
             messagebox.showinfo("편집 완료", "사진 편집이 적용되었습니다!")
